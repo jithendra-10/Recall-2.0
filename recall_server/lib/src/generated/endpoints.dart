@@ -326,6 +326,11 @@ class Endpoints extends _i1.EndpointDispatch {
               type: _i1.getType<String>(),
               nullable: false,
             ),
+            'userId': _i1.ParameterDescription(
+              name: 'userId',
+              type: _i1.getType<int>(),
+              nullable: false,
+            ),
           },
           call:
               (
@@ -335,6 +340,7 @@ class Endpoints extends _i1.EndpointDispatch {
                   .exchangeAndStoreGmailToken(
                     session,
                     params['authCode'],
+                    params['userId'],
                   ),
         ),
         'storeRefreshToken': _i1.MethodConnector(

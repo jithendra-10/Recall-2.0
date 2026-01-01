@@ -279,12 +279,17 @@ class EndpointDashboard extends _i2.EndpointRef {
   );
 
   /// Exchange auth code for refresh token and store it
-  _i3.Future<bool> exchangeAndStoreGmailToken(String authCode) =>
-      caller.callServerEndpoint<bool>(
-        'dashboard',
-        'exchangeAndStoreGmailToken',
-        {'authCode': authCode},
-      );
+  _i3.Future<bool> exchangeAndStoreGmailToken(
+    String authCode,
+    int userId,
+  ) => caller.callServerEndpoint<bool>(
+    'dashboard',
+    'exchangeAndStoreGmailToken',
+    {
+      'authCode': authCode,
+      'userId': userId,
+    },
+  );
 
   /// Store refresh token manually (legacy/debug)
   _i3.Future<void> storeRefreshToken(String refreshToken) =>

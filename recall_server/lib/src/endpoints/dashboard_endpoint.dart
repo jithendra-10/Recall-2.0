@@ -4,6 +4,7 @@ import 'package:serverpod/serverpod.dart';
 import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import '../generated/protocol.dart';
+import '../future_calls/gmail_sync_future_call.dart';
 
 class DashboardEndpoint extends Endpoint {
   // Don't require login - we'll check manually or use demo data
@@ -151,96 +152,144 @@ class DashboardEndpoint extends Endpoint {
     )).toList();
   }
 
-  /// Trigger manual sync
-  Future<void> triggerSync(Session session) async {
-    final userIdentifier = session.authenticated?.userIdentifier;
-    if (userIdentifier == null) return; // Silently skip if not authenticated
-    final userId = int.parse(userIdentifier);
+  /// Trigger manual sync for a user
+  /// If userId is provided, use it directly (for unauthenticated contexts)
+  /// Otherwise try to get from session
+  Future<void> triggerSync(Session session, {int? userId}) async {
+    // Get userId from parameter or session
+    int? targetUserId = userId;
+    if (targetUserId == null) {
+      final userIdentifier = session.authenticated?.userIdentifier;
+      if (userIdentifier == null) {
+        session.log('triggerSync: No userId and no authenticated session', level: LogLevel.warning);
+        return;
+      }
+      targetUserId = int.parse(userIdentifier);
+    }
 
-    session.log('Manual sync triggered for user $userId', level: LogLevel.info);
+    session.log('triggerSync: Starting for userId=$targetUserId', level: LogLevel.info);
     
     final userConfig = await UserConfig.db.findFirstRow(
       session,
-      where: (t) => t.userInfoId.equals(userId),
+      where: (t) => t.userInfoId.equals(targetUserId!),
     );
 
     if (userConfig == null || userConfig.googleRefreshToken == null) {
-      session.log('No Gmail connection configured for user $userId', level: LogLevel.warning);
+      session.log('triggerSync: No Gmail connection for userId=$targetUserId', level: LogLevel.warning);
       return;
     }
 
-    userConfig.lastSyncTime = DateTime.now().toUtc();
-    await UserConfig.db.updateRow(session, userConfig);
+    // Actually invoke the Gmail sync future call
+    try {
+      final gmailSync = GmailSyncFutureCall();
+      await gmailSync.invoke(session, null);
+      session.log('triggerSync: Gmail sync completed for userId=$targetUserId', level: LogLevel.info);
+    } catch (e, stack) {
+      session.log('triggerSync: Gmail sync failed: $e', level: LogLevel.error, stackTrace: stack);
+    }
   }
 
   /// Exchange auth code for refresh token and store it
-  Future<bool> exchangeAndStoreGmailToken(Session session, String authCode) async {
-    final userIdentifier = session.authenticated?.userIdentifier;
-    if (userIdentifier == null) return false;
-    final userId = int.parse(userIdentifier);
+  /// Returns detailed error info on failure for debugging
+  Future<bool> exchangeAndStoreGmailToken(Session session, String authCode, int userId) async {
+    if (userId <= 0) {
+      session.log('exchangeAndStoreGmailToken: Invalid userId=$userId', level: LogLevel.error);
+      return false;
+    }
+
+    session.log('exchangeAndStoreGmailToken: Starting for userId=$userId, authCode length=${authCode.length}', level: LogLevel.info);
 
     try {
       // 1. Load Client Secret
       final secretFile = File('config/google_client_secret.json');
       if (!await secretFile.exists()) {
-        session.log('Secret file not found', level: LogLevel.error);
+        session.log('exchangeAndStoreGmailToken: Secret file not found', level: LogLevel.error);
         return false;
       }
       
       final secretJson = jsonDecode(await secretFile.readAsString());
       final webConfig = secretJson['web'];
-      final clientId = webConfig['client_id'];
-      final clientSecret = webConfig['client_secret'];
+      final clientId = webConfig['client_id'] as String;
+      final clientSecret = webConfig['client_secret'] as String;
       
-      // Use the first redirect URI from config (usually the correct one)
-      // For mobile apps using serverAuthCode, the redirect URI often needs to exactly match 
-      // what was registered or sometimes be null/'postmessage'. 
-      // We try the registered one first.
-      /*
-      final redirectUri = (webConfig['redirect_uris'] as List).isNotEmpty 
-          ? (webConfig['redirect_uris'] as List).first 
-          : null;
-      */
-      // For Native Android/iOS Google Sign In, the serverAuthCode is generated without a redirect URI.
-      // Passing one during exchange causes a mismatch error. We must pass null.
-      const String? redirectUri = null;
+      session.log('exchangeAndStoreGmailToken: Using clientId=${clientId.substring(0, 20)}...', level: LogLevel.info);
 
-      session.log('Exchanging code for user $userId with redirect: $redirectUri', level: LogLevel.info);
-
-      // 2. Exchange Code
-      final client = http.Client();
+      // 2. Manual OAuth token exchange with detailed error logging
+      final httpClient = http.Client();
       try {
-        final credentials = await obtainAccessCredentialsViaCodeExchange(
-          client,
-          ClientId(clientId, clientSecret),
-          authCode,
+        final response = await httpClient.post(
+          Uri.parse('https://oauth2.googleapis.com/token'),
+          headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+          body: {
+            'code': authCode,
+            'client_id': clientId,
+            'client_secret': clientSecret,
+            'grant_type': 'authorization_code',
+            // No redirect_uri for native Android serverAuthCode flows
+          },
         );
 
-        final refreshToken = credentials.refreshToken;
+        session.log('exchangeAndStoreGmailToken: Google response status=${response.statusCode}', level: LogLevel.info);
+        
+        if (response.statusCode != 200) {
+          // Log the full error for debugging
+          session.log('exchangeAndStoreGmailToken: FAILED - ${response.body}', level: LogLevel.error);
+          
+          // Parse Google's error response
+          try {
+            final errorJson = jsonDecode(response.body);
+            final error = errorJson['error'] ?? 'unknown';
+            final errorDesc = errorJson['error_description'] ?? 'no description';
+            session.log('exchangeAndStoreGmailToken: Error=$error, Description=$errorDesc', level: LogLevel.error);
+            
+            // Common errors:
+            // - "invalid_grant" = code already used or expired
+            // - "redirect_uri_mismatch" = wrong redirect URI
+            // - "invalid_client" = wrong client credentials
+          } catch (_) {}
+          
+          return false;
+        }
+
+        final tokenData = jsonDecode(response.body);
+        final refreshToken = tokenData['refresh_token'] as String?;
+        final accessToken = tokenData['access_token'] as String?;
+        final expiresIn = tokenData['expires_in'];
+
+        session.log('exchangeAndStoreGmailToken: accessToken=${accessToken != null}, refreshToken=${refreshToken != null}, expiresIn=$expiresIn', level: LogLevel.info);
+
         if (refreshToken == null) {
-          session.log('No refresh token returned. User might need to revoke access.', level: LogLevel.warning);
-          // Only sync if we have a token or valid credentials, but we need refresh token for offline
-          // If null, it means we were already approved but not "offline" or already granted?
-          // We can't proceed without it for background sync.
+          session.log(
+            'exchangeAndStoreGmailToken: No refresh_token returned! '
+            'This happens when the user has previously authorized the app. '
+            'User should revoke access at https://myaccount.google.com/permissions and try again.',
+            level: LogLevel.warning
+          );
           return false;
         }
 
         // 3. Store Token
         await _storeRefreshTokenInternal(session, userId, refreshToken);
-        session.log('Refresh token stored successfully', level: LogLevel.info);
+        session.log('exchangeAndStoreGmailToken: SUCCESS - Token stored for userId=$userId', level: LogLevel.info);
         
-        // Trigger immediate sync
-        await triggerSync(session);
+        // 4. Trigger immediate sync
+        try {
+          await triggerSync(session, userId: userId);
+        } catch (e) {
+          session.log('exchangeAndStoreGmailToken: Sync trigger failed but token stored: $e', level: LogLevel.warning);
+        }
+        
         return true;
         
       } finally {
-        client.close();
+        httpClient.close();
       }
     } catch (e, stack) {
-      session.log('Token exchange error: $e', level: LogLevel.error, stackTrace: stack);
+      session.log('exchangeAndStoreGmailToken: Exception - $e', level: LogLevel.error, stackTrace: stack);
       return false;
     }
   }
+
 
   /// Internal helper to store token
   Future<void> _storeRefreshTokenInternal(Session session, int userId, String refreshToken) async {

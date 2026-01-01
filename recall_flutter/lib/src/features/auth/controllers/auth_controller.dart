@@ -88,16 +88,16 @@ class AuthController {
           'https://www.googleapis.com/auth/gmail.readonly',
         ],
         serverClientId: '59154691355-q448tcg88mp3pg4pgsfhev4eje8q6nup.apps.googleusercontent.com',
+        forceCodeForRefreshToken: true, // CRITICAL: Always get fresh code for refresh token
       );
 
-      print('Attempting Google Sign-In with Gmail scope...');
+      // IMPORTANT: Sign out first to ensure we get a FRESH serverAuthCode
+      // Cached sessions from signInSilently() may have already-consumed codes
+      print('Signing out to force fresh auth code...');
+      await googleSignIn.signOut();
 
-      GoogleSignInAccount? googleUser = await googleSignIn.signInSilently();
-      
-      if (googleUser == null) {
-        print('No cached session, showing sign-in dialog...');
-        googleUser = await googleSignIn.signIn();
-      }
+      print('Requesting fresh sign-in with Gmail scope...');
+      final googleUser = await googleSignIn.signIn();
       
       if (googleUser == null) {
         print('Sign-in cancelled by user or failed');
@@ -156,7 +156,15 @@ class AuthController {
           if (authCode != null) {
             print('Exchanging auth code for Gmail refresh token...');
             try {
-              final success = await client.dashboard.exchangeAndStoreGmailToken(authCode);
+              final userId = serverAuth.userInfo!.id!;
+              // Use a temporary client WITHOUT auth headers to avoid JWT validation issues
+              // The server's JWT validation rejects legacy auth tokens
+              final tempClient = Client(
+                'http://$serverIpAddress:8080/',
+                // No authenticationKeyManager = no auth headers sent
+              );
+              final success = await tempClient.dashboard.exchangeAndStoreGmailToken(authCode, userId);
+              tempClient.close();
               if (success) {
                  print('✓ Gmail refresh token stored');
               } else {

@@ -605,6 +605,7 @@ class _DashboardEndpoint {
   _i3.Future<bool> exchangeAndStoreGmailToken(
     _i1.TestSessionBuilder sessionBuilder,
     String authCode,
+    int userId,
   ) async {
     return _i1.callAwaitableFunctionAndHandleExceptions(() async {
       var _localUniqueSession =
@@ -617,7 +618,10 @@ class _DashboardEndpoint {
           createSessionCallback: (_) => _localUniqueSession,
           endpointPath: 'dashboard',
           methodName: 'exchangeAndStoreGmailToken',
-          parameters: _i1.testObjectToJson({'authCode': authCode}),
+          parameters: _i1.testObjectToJson({
+            'authCode': authCode,
+            'userId': userId,
+          }),
           serializationManager: _serializationManager,
         );
         var _localReturnValue =
