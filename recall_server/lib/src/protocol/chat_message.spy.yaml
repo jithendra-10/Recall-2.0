@@ -1,0 +1,7 @@
+class: ChatMessage
+fields:
+  role: String  # "user" or "assistant"
+  content: String
+  timestamp: DateTime
+  # Sources used for RAG response
+  sources: List<String>?

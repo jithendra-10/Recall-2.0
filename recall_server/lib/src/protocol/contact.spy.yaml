@@ -1,0 +1,18 @@
+class: Contact
+table: recall_contact
+fields:
+  ownerId: int # The user who owns this contact
+  email: String
+  name: String?
+  avatarUrl: String?
+  # Intelligence Fields
+  bio: String? # AI-generated summary of who this is
+  lastContacted: DateTime?
+  # Relationship Health (0-100)
+  healthScore: double
+  # Tier: 1=VIP (Monthly), 2=Regular (Quarterly), 3=Loose (Yearly)
+  tier: int 
+indexes:
+  contact_unique:
+    fields: ownerId, email
+    unique: true

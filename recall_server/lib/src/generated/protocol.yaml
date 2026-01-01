@@ -1,0 +1,28 @@
+emailIdp:
+  - login:
+  - startRegistration:
+  - verifyRegistrationCode:
+  - finishRegistration:
+  - startPasswordReset:
+  - verifyPasswordResetCode:
+  - finishPasswordReset:
+jwtRefresh:
+  - refreshAccessToken:
+dashboard:
+  - getDashboardData:
+  - getContacts:
+  - getContactInteractions:
+  - triggerSync:
+  - exchangeAndStoreGmailToken:
+  - storeRefreshToken:
+  - getSetupStatus:
+debug:
+  - seedTestData:
+  - clearTestData:
+googleAuth:
+  - exchangeCode:
+recall:
+  - askRecall:
+  - generateDraftEmail:
+greeting:
+  - hello:

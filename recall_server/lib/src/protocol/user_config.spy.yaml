@@ -1,0 +1,14 @@
+class: UserConfig
+table: recall_user_config
+fields:
+  userInfoId: int
+  # Encrypted refresh token for offline Gmail access
+  googleRefreshToken: String? 
+  # Last time we successfully synced their email
+  lastSyncTime: DateTime?
+  # The History ID from Gmail (to fetch only new emails)
+  gmailHistoryId: String? 
+indexes:
+  user_config_idx:
+    fields: userInfoId
+    unique: true

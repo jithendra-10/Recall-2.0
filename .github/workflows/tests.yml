@@ -1,0 +1,47 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      VERSION: '3.1.1'
+      SERVERPOD_PASSWORD_database: 'ch3mE8RBveT19lF7uOwyRlENlknXxldJ'
+      SERVERPOD_PASSWORD_redis: 'wiZjitsBg594z24X2Ao4W2I7TumlpWnH'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.8'
+
+      - name: Start containers
+        working-directory: recall_server
+        run: docker compose up --build -d
+
+      - name: Install dependencies
+        working-directory: recall_server
+        run: dart pub get
+
+      - name: Install Serverpod CLI
+        working-directory: recall_server
+        run: dart pub global activate serverpod_cli $VERSION
+
+      - name: Run Serverpod generator
+        working-directory: recall_server
+        run: serverpod generate
+
+      - name: Run tests
+        working-directory: recall_server
+        run: dart test
+
+      - name: Stop containers
+        if: always()
+        working-directory: recall_server
+        run: docker compose down -v

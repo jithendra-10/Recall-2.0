@@ -1,0 +1,6 @@
+class: SetupStatus
+fields:
+  hasToken: bool
+  emailCount: int
+  interactionCount: int
+  isSyncing: bool

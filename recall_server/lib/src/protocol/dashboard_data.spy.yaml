@@ -1,0 +1,20 @@
+class: DashboardData
+fields:
+  # Sync status
+  lastSyncTime: DateTime?
+  isSyncing: bool
+  
+  # Primary nudge (most urgent drifting contact)
+  nudgeContact: Contact?
+  nudgeDaysSilent: int?
+  nudgeLastTopic: String?
+  
+  # Recent interactions (memory feed)
+  recentInteractions: List<InteractionSummary>
+  
+  # Relationship health snapshot
+  topContacts: List<Contact>
+  
+  # Stats
+  totalContacts: int
+  driftingCount: int

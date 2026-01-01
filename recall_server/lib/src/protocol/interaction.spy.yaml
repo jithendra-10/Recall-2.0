@@ -1,0 +1,21 @@
+class: Interaction
+table: recall_interaction
+fields:
+  ownerId: int
+  contact: Contact?, relation
+  date: DateTime
+  
+  # The raw content (snippet)
+  snippet: String 
+  
+  # The Vector Embedding (Serverpod 3.0 Syntax)
+  # 768 is the dimension size for Gemini embeddings
+  embedding: Vector(768)
+  
+  # Metadata
+  type: String # "email_in", "email_out", "meeting"
+  sentiment: String? # "positive", "neutral", "urgent"
+indexes:
+  interaction_vector_idx:
+    fields: embedding
+    type: hnsw # Fast approximate nearest neighbor search
