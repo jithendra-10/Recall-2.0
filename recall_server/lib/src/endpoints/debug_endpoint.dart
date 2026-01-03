@@ -19,7 +19,7 @@ class DebugEndpoint extends Endpoint {
         session,
         where: (t) => t.ownerId.equals(testUserId),
       );
-      
+
       if (existingContacts.isNotEmpty) {
         return 'Test data already exists (${existingContacts.length} contacts)';
       }
@@ -29,7 +29,7 @@ class DebugEndpoint extends Endpoint {
         session,
         where: (t) => t.userInfoId.equals(testUserId),
       );
-      
+
       if (userConfig == null) {
         userConfig = UserConfig(
           userInfoId: testUserId,
@@ -94,7 +94,8 @@ class DebugEndpoint extends Endpoint {
           ownerId: testUserId,
           contactId: insertedContacts[1].id!, // Priya
           date: DateTime.now().subtract(const Duration(hours: 2)),
-          snippet: 'Shared notes from the product sync meeting - discussed Q1 roadmap priorities',
+          snippet:
+              'Shared notes from the product sync meeting - discussed Q1 roadmap priorities',
           type: 'email_in',
           embedding: Vector(List.filled(768, 0.0)),
         ),
@@ -110,7 +111,8 @@ class DebugEndpoint extends Endpoint {
           ownerId: testUserId,
           contactId: insertedContacts[3].id!, // Sneha
           date: DateTime.now().subtract(const Duration(days: 1)),
-          snippet: 'Quarterly review discussion - performance metrics and team goals',
+          snippet:
+              'Quarterly review discussion - performance metrics and team goals',
           type: 'meeting',
           embedding: Vector(List.filled(768, 0.0)),
         ),
@@ -118,7 +120,8 @@ class DebugEndpoint extends Endpoint {
           ownerId: testUserId,
           contactId: insertedContacts[0].id!, // Rahul
           date: DateTime.now().subtract(const Duration(days: 28)),
-          snippet: 'Internship referral at Google - his team is hiring for ML roles, promised to forward your resume',
+          snippet:
+              'Internship referral at Google - his team is hiring for ML roles, promised to forward your resume',
           type: 'email_in',
           embedding: Vector(List.filled(768, 0.0)),
         ),
@@ -126,7 +129,8 @@ class DebugEndpoint extends Endpoint {
           ownerId: testUserId,
           contactId: insertedContacts[4].id!, // Vikram
           date: DateTime.now().subtract(const Duration(days: 21)),
-          snippet: 'Discussed startup investment opportunity - follow up needed on term sheet',
+          snippet:
+              'Discussed startup investment opportunity - follow up needed on term sheet',
           type: 'email_in',
           embedding: Vector(List.filled(768, 0.0)),
         ),
@@ -138,9 +142,12 @@ class DebugEndpoint extends Endpoint {
 
       session.log('Test data seeded successfully', level: LogLevel.info);
       return 'Seeded ${contacts.length} contacts and ${interactions.length} interactions';
-      
     } catch (e, stack) {
-      session.log('Error seeding data: $e', level: LogLevel.error, stackTrace: stack);
+      session.log(
+        'Error seeding data: $e',
+        level: LogLevel.error,
+        stackTrace: stack,
+      );
       return 'Error: $e';
     }
   }
@@ -148,26 +155,26 @@ class DebugEndpoint extends Endpoint {
   /// Clear all test data
   Future<String> clearTestData(Session session) async {
     const testUserId = 1;
-    
+
     try {
       // Delete interactions first (foreign key)
       await Interaction.db.deleteWhere(
         session,
         where: (t) => t.ownerId.equals(testUserId),
       );
-      
+
       // Delete contacts
       await Contact.db.deleteWhere(
         session,
         where: (t) => t.ownerId.equals(testUserId),
       );
-      
+
       // Delete user config
       await UserConfig.db.deleteWhere(
         session,
         where: (t) => t.userInfoId.equals(testUserId),
       );
-      
+
       return 'Test data cleared';
     } catch (e) {
       return 'Error: $e';

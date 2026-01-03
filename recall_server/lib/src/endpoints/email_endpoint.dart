@@ -14,7 +14,7 @@ class EmailEndpoint extends Endpoint {
 
   static Future<void> _loadCredentials() async {
     if (_credentialsLoaded) return;
-    
+
     try {
       final configFile = File('config/google_client_secret.json');
       final configJson = jsonDecode(await configFile.readAsString());
@@ -26,7 +26,12 @@ class EmailEndpoint extends Endpoint {
     }
   }
 
-  Future<bool> sendEmail(Session session, String to, String subject, String body) async {
+  Future<bool> sendEmail(
+    Session session,
+    String to,
+    String subject,
+    String body,
+  ) async {
     final userIdentifier = session.authenticated?.userIdentifier;
     if (userIdentifier == null) {
       throw Exception('User not authenticated');
@@ -45,9 +50,13 @@ class EmailEndpoint extends Endpoint {
     }
 
     final refreshToken = userConfig.googleRefreshToken!;
-    
+
     final credentials = AccessCredentials(
-      AccessToken('Bearer', '', DateTime.now().toUtc().subtract(const Duration(hours: 1))),
+      AccessToken(
+        'Bearer',
+        '',
+        DateTime.now().toUtc().subtract(const Duration(hours: 1)),
+      ),
       refreshToken,
       ['https://www.googleapis.com/auth/gmail.compose'],
     );
@@ -61,8 +70,7 @@ class EmailEndpoint extends Endpoint {
     try {
       final gmailApi = gmail.GmailApi(authClient);
 
-      final message = gmail.Message()
-        ..raw = _createEmail(to, subject, body);
+      final message = gmail.Message()..raw = _createEmail(to, subject, body);
 
       await gmailApi.users.messages.send(message, 'me');
       session.log('Email sent to $to', level: LogLevel.info);
@@ -76,12 +84,12 @@ class EmailEndpoint extends Endpoint {
   }
 
   String _createEmail(String to, String subject, String body) {
-    final email = 
-      'To: $to\r\n'
-      'Subject: $subject\r\n'
-      'Content-Type: text/plain; charset=utf-8\r\n\r\n'
-      '$body';
-    
+    final email =
+        'To: $to\r\n'
+        'Subject: $subject\r\n'
+        'Content-Type: text/plain; charset=utf-8\r\n\r\n'
+        '$body';
+
     return base64Url.encode(utf8.encode(email));
   }
 }

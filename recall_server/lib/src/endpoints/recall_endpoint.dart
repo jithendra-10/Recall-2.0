@@ -37,7 +37,8 @@ class RecallEndpoint extends Endpoint {
       if (interactions.isEmpty) {
         return ChatMessage(
           role: 'assistant',
-          content: "I don't have any communication history to search through yet. Once your Gmail syncs, I'll be able to answer questions about your contacts.",
+          content:
+              "I don't have any communication history to search through yet. Once your Gmail syncs, I'll be able to answer questions about your contacts.",
           timestamp: DateTime.now().toUtc(),
           sources: [],
         );
@@ -45,23 +46,33 @@ class RecallEndpoint extends Endpoint {
 
       // Keyword search for relevant interactions
       final queryLower = query.toLowerCase();
-      
-      final matches = interactions.where((i) {
-        final snippet = i.snippet.toLowerCase();
-        final contactName = (i.contact?.name ?? '').toLowerCase();
-        final contactEmail = (i.contact?.email ?? '').toLowerCase();
-        
-        return snippet.contains(queryLower) ||
-               contactName.contains(queryLower) ||
-               contactEmail.contains(queryLower) ||
-               queryLower.split(' ').any((word) => 
-                 word.length > 3 && (snippet.contains(word) || contactName.contains(word)));
-      }).take(10).toList();
+
+      final matches = interactions
+          .where((i) {
+            final snippet = i.snippet.toLowerCase();
+            final contactName = (i.contact?.name ?? '').toLowerCase();
+            final contactEmail = (i.contact?.email ?? '').toLowerCase();
+
+            return snippet.contains(queryLower) ||
+                contactName.contains(queryLower) ||
+                contactEmail.contains(queryLower) ||
+                queryLower
+                    .split(' ')
+                    .any(
+                      (word) =>
+                          word.length > 3 &&
+                          (snippet.contains(word) ||
+                              contactName.contains(word)),
+                    );
+          })
+          .take(10)
+          .toList();
 
       if (matches.isEmpty) {
         return ChatMessage(
           role: 'assistant',
-          content: "I couldn't find any relevant information about that in your communication history. Try asking about specific contacts or topics from your emails.",
+          content:
+              "I couldn't find any relevant information about that in your communication history. Try asking about specific contacts or topics from your emails.",
           timestamp: DateTime.now().toUtc(),
           sources: [],
         );
@@ -81,10 +92,15 @@ class RecallEndpoint extends Endpoint {
       );
 
       // Build sources list
-      final sources = matches.map((m) {
-        final contactName = m.contact?.name ?? m.contact?.email ?? 'Unknown';
-        return '$contactName (${_formatDate(m.date)})';
-      }).toSet().take(5).toList();
+      final sources = matches
+          .map((m) {
+            final contactName =
+                m.contact?.name ?? m.contact?.email ?? 'Unknown';
+            return '$contactName (${_formatDate(m.date)})';
+          })
+          .toSet()
+          .take(5)
+          .toList();
 
       return ChatMessage(
         role: 'assistant',
@@ -93,10 +109,15 @@ class RecallEndpoint extends Endpoint {
         sources: sources,
       );
     } catch (e, stack) {
-      session.log('Ask RECALL error: $e', level: LogLevel.error, stackTrace: stack);
+      session.log(
+        'Ask RECALL error: $e',
+        level: LogLevel.error,
+        stackTrace: stack,
+      );
       return ChatMessage(
         role: 'assistant',
-        content: "I encountered an error processing your request. Please try again.",
+        content:
+            "I encountered an error processing your request. Please try again.",
         timestamp: DateTime.now().toUtc(),
         sources: [],
       );
@@ -106,7 +127,7 @@ class RecallEndpoint extends Endpoint {
   String _formatDate(DateTime date) {
     final now = DateTime.now().toUtc();
     final diff = now.difference(date);
-    
+
     if (diff.inDays == 0) return 'today';
     if (diff.inDays == 1) return 'yesterday';
     if (diff.inDays < 7) return '${diff.inDays} days ago';
@@ -134,10 +155,12 @@ class RecallEndpoint extends Endpoint {
     );
 
     final contactName = contact.name ?? 'there';
-    final daysSilent = contact.lastContacted != null 
+    final daysSilent = contact.lastContacted != null
         ? DateTime.now().toUtc().difference(contact.lastContacted!).inDays
         : 30;
-    final lastTopic = interactions.isNotEmpty ? interactions.first.snippet : 'our last conversation';
+    final lastTopic = interactions.isNotEmpty
+        ? interactions.first.snippet
+        : 'our last conversation';
     final recentSnippets = interactions.map((i) => i.snippet).toList();
 
     final draft = await GeminiService.generateDraftEmail(

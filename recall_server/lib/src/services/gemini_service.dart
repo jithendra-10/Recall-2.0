@@ -1,17 +1,23 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:serverpod/serverpod.dart';
 import 'package:dotenv/dotenv.dart';
 
 /// Gemini AI Service for summarization and embeddings
 class GeminiService {
   static final _env = DotEnv(includePlatformEnvironment: true)..load();
   static String get _apiKey => _env['GEMINI_API_KEY'] ?? '';
-  static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
-  
+  static const String _baseUrl =
+      'https://generativelanguage.googleapis.com/v1beta';
+
   /// Analyze email content using strict logic and return structured data
-  static Future<Map<String, dynamic>?> analyzeEmail(String content, String sender, String recipient, bool isSent) async {
-    final prompt = '''You are the intelligence layer of an application that reads a user's Gmail in real time.
+  static Future<Map<String, dynamic>?> analyzeEmail(
+    String content,
+    String sender,
+    String recipient,
+    bool isSent,
+  ) async {
+    final prompt =
+        '''You are the intelligence layer of an application that reads a user's Gmail in real time.
 Your task is to process raw Gmail messages and convert them into meaningful, structured memory for the app.
 
 Rules:
@@ -59,42 +65,47 @@ Return a valid JSON object. Do not include markdown code blocks.
 
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/models/gemini-1.5-flash:generateContent?key=$_apiKey'),
+        Uri.parse(
+          '$_baseUrl/models/gemini-1.5-flash:generateContent?key=$_apiKey',
+        ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'contents': [
             {
               'parts': [
-                {'text': prompt}
-              ]
-            }
+                {'text': prompt},
+              ],
+            },
           ],
           'generationConfig': {
             'temperature': 0.1, // Lower temperature for stricter adherence
             'maxOutputTokens': 300,
             'responseMimeType': 'application/json',
-          }
+          },
         }),
       );
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final text = data['candidates']?[0]?['content']?['parts']?[0]?['text'];
-        
+
         if (text != null) {
           try {
             // Clean markdown if present (though responseMimeType should prevent it)
-            final cleanText = text.replaceAll('```json', '').replaceAll('```', '').trim();
+            final cleanText = text
+                .replaceAll('```json', '')
+                .replaceAll('```', '')
+                .trim();
             final jsonResult = jsonDecode(cleanText);
-            
+
             if (jsonResult['ignore'] == true) {
               return null;
             }
-            
+
             return jsonResult;
           } catch (e) {
-             print('Gemini JSON parsing error: $e');
-             return null;
+            print('Gemini JSON parsing error: $e');
+            return null;
           }
         }
       } else {
@@ -103,7 +114,7 @@ Return a valid JSON object. Do not include markdown code blocks.
     } catch (e) {
       print('Gemini analysis error: $e');
     }
-    
+
     return null;
   }
 
@@ -111,15 +122,17 @@ Return a valid JSON object. Do not include markdown code blocks.
   static Future<List<double>> generateEmbedding(String text) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/models/text-embedding-004:embedContent?key=$_apiKey'),
+        Uri.parse(
+          '$_baseUrl/models/text-embedding-004:embedContent?key=$_apiKey',
+        ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'model': 'models/text-embedding-004',
           'content': {
             'parts': [
-              {'text': text}
-            ]
-          }
+              {'text': text},
+            ],
+          },
         }),
       );
 
@@ -130,12 +143,14 @@ Return a valid JSON object. Do not include markdown code blocks.
           return embeddings.map((e) => (e as num).toDouble()).toList();
         }
       } else {
-        print('Gemini embedding error: ${response.statusCode} - ${response.body}');
+        print(
+          'Gemini embedding error: ${response.statusCode} - ${response.body}',
+        );
       }
     } catch (e) {
       print('Gemini embedding error: $e');
     }
-    
+
     // Return zero vector as fallback (768 dimensions)
     return List.filled(768, 0.0);
   }
@@ -148,8 +163,9 @@ Return a valid JSON object. Do not include markdown code blocks.
     required List<String> recentInteractions,
   }) async {
     final context = recentInteractions.take(3).join('\n');
-    
-    final prompt = '''Generate a friendly, professional catch-up email to reconnect with someone. Keep it natural and personal.
+
+    final prompt =
+        '''Generate a friendly, professional catch-up email to reconnect with someone. Keep it natural and personal.
 
 Contact: $contactName
 Days since last contact: $daysSilent days
@@ -166,20 +182,22 @@ Email:''';
 
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/models/gemini-1.5-flash:generateContent?key=$_apiKey'),
+        Uri.parse(
+          '$_baseUrl/models/gemini-1.5-flash:generateContent?key=$_apiKey',
+        ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'contents': [
             {
               'parts': [
-                {'text': prompt}
-              ]
-            }
+                {'text': prompt},
+              ],
+            },
           ],
           'generationConfig': {
             'temperature': 0.7,
             'maxOutputTokens': 300,
-          }
+          },
         }),
       );
 
@@ -191,7 +209,7 @@ Email:''';
     } catch (e) {
       print('Gemini draft error: $e');
     }
-    
+
     return _fallbackDraft(contactName, lastTopic);
   }
 
@@ -215,8 +233,9 @@ Best regards''';
     }
 
     final context = retrievedContexts.join('\n\n');
-    
-    final prompt = '''You are a personal relationship assistant with access to the user's email history. Answer the question based ONLY on the provided context. If the context doesn't contain enough information, say so honestly.
+
+    final prompt =
+        '''You are a personal relationship assistant with access to the user's email history. Answer the question based ONLY on the provided context. If the context doesn't contain enough information, say so honestly.
 
 Context from email history:
 $context
@@ -227,20 +246,22 @@ Answer concisely and helpfully:''';
 
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/models/gemini-1.5-flash:generateContent?key=$_apiKey'),
+        Uri.parse(
+          '$_baseUrl/models/gemini-1.5-flash:generateContent?key=$_apiKey',
+        ),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'contents': [
             {
               'parts': [
-                {'text': prompt}
-              ]
-            }
+                {'text': prompt},
+              ],
+            },
           ],
           'generationConfig': {
             'temperature': 0.3,
             'maxOutputTokens': 500,
-          }
+          },
         }),
       );
 
@@ -252,7 +273,7 @@ Answer concisely and helpfully:''';
     } catch (e) {
       print('Gemini RAG error: $e');
     }
-    
+
     return 'Sorry, I encountered an error processing your request.';
   }
 }

@@ -41,7 +41,7 @@ void run(List<String> args) async {
               'http://localhost:8082/googlesignin',
               'http://192.168.88.194.nip.io:8082/googlesignin',
             ],
-          }
+          },
         }),
       ),
     ],
@@ -72,7 +72,9 @@ void run(List<String> args) async {
     );
   } else {
     pod.webServer.addRoute(
-      StaticRoute.file(File(Uri(path: 'web/pages/build_flutter_app.html').toFilePath())),
+      StaticRoute.file(
+        File(Uri(path: 'web/pages/build_flutter_app.html').toFilePath()),
+      ),
       '/app/**',
     );
   }

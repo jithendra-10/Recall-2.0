@@ -1,10 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:serverpod/serverpod.dart';
-import 'package:googleapis_auth/auth_io.dart';
 import 'package:http/http.dart' as http;
 import '../generated/protocol.dart';
-import '../future_calls/gmail_sync_future_call.dart';
 
 class DashboardEndpoint extends Endpoint {
   // Don't require login - we'll check manually or use demo data
@@ -18,7 +16,7 @@ class DashboardEndpoint extends Endpoint {
       final userIdentifier = session.authenticated?.userIdentifier;
       // CRITICAL FIX: Do NOT fallback to 1. If not authenticated and no userId provided, return empty.
       if (userIdentifier == null && userId == null) {
-         return DashboardData(
+        return DashboardData(
           lastSyncTime: null,
           isSyncing: false,
           nudgeContact: null,
@@ -40,15 +38,25 @@ class DashboardEndpoint extends Endpoint {
 
       // AUTO-SYNC: If user has token but never synced (or manually cleared), trigger sync now
       bool autoSyncTriggered = false;
-      if (userConfig != null && 
-          userConfig.googleRefreshToken != null && 
-          (userConfig.lastSyncTime == null || 
-           DateTime.now().toUtc().difference(userConfig.lastSyncTime!).inMinutes > 3)) {
-        session.log('getDashboardData: Auto-triggering first sync for userId=$currentUserId', level: LogLevel.info);
+      if (userConfig != null &&
+          userConfig.googleRefreshToken != null &&
+          (userConfig.lastSyncTime == null ||
+              DateTime.now()
+                      .toUtc()
+                      .difference(userConfig.lastSyncTime!)
+                      .inMinutes >
+                  3)) {
+        session.log(
+          'getDashboardData: Auto-triggering first sync for userId=$currentUserId',
+          level: LogLevel.info,
+        );
         autoSyncTriggered = true;
         // Run sync in background (don't await to avoid blocking dashboard load)
         _triggerSyncInternal(session, currentUserId).catchError((e) {
-          session.log('getDashboardData: Background sync error: $e', level: LogLevel.warning);
+          session.log(
+            'getDashboardData: Background sync error: $e',
+            level: LogLevel.warning,
+          );
         });
       }
 
@@ -64,12 +72,17 @@ class DashboardEndpoint extends Endpoint {
       int? nudgeDaysSilent;
       String? nudgeLastTopic;
       if (nudgeContact != null && nudgeContact.lastContacted != null) {
-        nudgeDaysSilent = DateTime.now().toUtc().difference(nudgeContact.lastContacted!).inDays;
-        
+        nudgeDaysSilent = DateTime.now()
+            .toUtc()
+            .difference(nudgeContact.lastContacted!)
+            .inDays;
+
         // Get last interaction topic
         final lastInteraction = await Interaction.db.findFirstRow(
           session,
-          where: (t) => t.ownerId.equals(currentUserId) & t.contactId.equals(nudgeContact.id!),
+          where: (t) =>
+              t.ownerId.equals(currentUserId) &
+              t.contactId.equals(nudgeContact.id!),
           orderBy: (t) => t.date,
           orderDescending: true,
         );
@@ -86,16 +99,20 @@ class DashboardEndpoint extends Endpoint {
         include: Interaction.include(contact: Contact.include()),
       );
 
-      final recentInteractions = recentInteractionsRaw.map((i) => InteractionSummary(
-        contactName: i.contact?.name ?? i.contact?.email ?? 'Unknown',
-        contactEmail: i.contact?.email ?? '',
-        contactAvatarUrl: i.contact?.avatarUrl,
-        summary: i.snippet,
-        subject: i.subject,
-        body: i.body,
-        timestamp: i.date,
-        type: i.type,
-      )).toList();
+      final recentInteractions = recentInteractionsRaw
+          .map(
+            (i) => InteractionSummary(
+              contactName: i.contact?.name ?? i.contact?.email ?? 'Unknown',
+              contactEmail: i.contact?.email ?? '',
+              contactAvatarUrl: i.contact?.avatarUrl,
+              summary: i.snippet,
+              subject: i.subject,
+              body: i.body,
+              timestamp: i.date,
+              type: i.type,
+            ),
+          )
+          .toList();
 
       // Get top contacts by health score
       final topContacts = await Contact.db.find(
@@ -126,7 +143,11 @@ class DashboardEndpoint extends Endpoint {
         driftingCount: driftingCount,
       );
     } catch (e, stack) {
-      session.log('Dashboard error: $e', level: LogLevel.error, stackTrace: stack);
+      session.log(
+        'Dashboard error: $e',
+        level: LogLevel.error,
+        stackTrace: stack,
+      );
       // Return empty state on error
       return DashboardData(
         lastSyncTime: null,
@@ -174,13 +195,17 @@ class DashboardEndpoint extends Endpoint {
       include: Interaction.include(contact: Contact.include()),
     );
 
-    return interactions.map((i) => InteractionSummary(
-      contactName: i.contact?.name ?? i.contact?.email ?? 'Unknown',
-      contactEmail: i.contact?.email ?? '',
-      summary: i.snippet,
-      timestamp: i.date,
-      type: i.type,
-    )).toList();
+    return interactions
+        .map(
+          (i) => InteractionSummary(
+            contactName: i.contact?.name ?? i.contact?.email ?? 'Unknown',
+            contactEmail: i.contact?.email ?? '',
+            summary: i.snippet,
+            timestamp: i.date,
+            type: i.type,
+          ),
+        )
+        .toList();
   }
 
   /// Trigger manual sync - gets userId from session
@@ -193,15 +218,21 @@ class DashboardEndpoint extends Endpoint {
 
   /// Internal sync trigger that accepts userId directly (for unauthenticated contexts)
   Future<void> _triggerSyncInternal(Session session, int userId) async {
-    session.log('_triggerSyncInternal: Scheduling sync for userId=$userId', level: LogLevel.info);
-    
+    session.log(
+      '_triggerSyncInternal: Scheduling sync for userId=$userId',
+      level: LogLevel.info,
+    );
+
     final userConfig = await UserConfig.db.findFirstRow(
       session,
       where: (t) => t.userInfoId.equals(userId),
     );
 
     if (userConfig == null || userConfig.googleRefreshToken == null) {
-      session.log('_triggerSyncInternal: No Gmail connection for userId=$userId', level: LogLevel.warning);
+      session.log(
+        '_triggerSyncInternal: No Gmail connection for userId=$userId',
+        level: LogLevel.warning,
+      );
       return;
     }
 
@@ -212,38 +243,53 @@ class DashboardEndpoint extends Endpoint {
     // Schedule the future call to run safely in background (detached from this HTTP session)
     // passing userConfig object as the payload (it is SerializableEntity)
     // Using registered name 'gmail_sync' from server.dart
-    await Serverpod.instance!.futureCallWithDelay(
+    await Serverpod.instance.futureCallWithDelay(
       'gmail_sync',
       userConfig,
       const Duration(seconds: 0),
     );
   }
 
-
   /// Exchange auth code for refresh token and store it
   /// Returns detailed error info on failure for debugging
-  Future<bool> exchangeAndStoreGmailToken(Session session, String authCode, int userId) async {
+  Future<bool> exchangeAndStoreGmailToken(
+    Session session,
+    String authCode,
+    int userId,
+  ) async {
     if (userId <= 0) {
-      session.log('exchangeAndStoreGmailToken: Invalid userId=$userId', level: LogLevel.error);
+      session.log(
+        'exchangeAndStoreGmailToken: Invalid userId=$userId',
+        level: LogLevel.error,
+      );
       return false;
     }
 
-    session.log('exchangeAndStoreGmailToken: Starting for userId=$userId, authCode length=${authCode.length}', level: LogLevel.info);
+    session.log(
+      'exchangeAndStoreGmailToken: Starting for userId=$userId, authCode length=${authCode.length}',
+      level: LogLevel.info,
+    );
 
     try {
       // 1. Load Client Secret
       final secretFile = File('config/google_client_secret.json');
       if (!await secretFile.exists()) {
-        session.log('exchangeAndStoreGmailToken: Secret file not found', level: LogLevel.error);
+        session.log(
+          'exchangeAndStoreGmailToken: Secret file not found',
+          level: LogLevel.error,
+        );
         return false;
       }
-      
+
       final secretJson = jsonDecode(await secretFile.readAsString());
       final webConfig = secretJson['web'];
       final clientId = webConfig['client_id'] as String;
       final clientSecret = webConfig['client_secret'] as String;
-      
-      session.log('exchangeAndStoreGmailToken: Using clientId=${clientId.substring(0, 20)}...', level: LogLevel.info);
+
+      session.log(
+        'exchangeAndStoreGmailToken: Using clientId=${clientId.substring(0, 20)}...',
+        level: LogLevel.info,
+      );
 
       // 2. Manual OAuth token exchange with detailed error logging
       final httpClient = http.Client();
@@ -260,25 +306,35 @@ class DashboardEndpoint extends Endpoint {
           },
         );
 
-        session.log('exchangeAndStoreGmailToken: Google response status=${response.statusCode}', level: LogLevel.info);
-        
+        session.log(
+          'exchangeAndStoreGmailToken: Google response status=${response.statusCode}',
+          level: LogLevel.info,
+        );
+
         if (response.statusCode != 200) {
           // Log the full error for debugging
-          session.log('exchangeAndStoreGmailToken: FAILED - ${response.body}', level: LogLevel.error);
-          
+          session.log(
+            'exchangeAndStoreGmailToken: FAILED - ${response.body}',
+            level: LogLevel.error,
+          );
+
           // Parse Google's error response
           try {
             final errorJson = jsonDecode(response.body);
             final error = errorJson['error'] ?? 'unknown';
-            final errorDesc = errorJson['error_description'] ?? 'no description';
-            session.log('exchangeAndStoreGmailToken: Error=$error, Description=$errorDesc', level: LogLevel.error);
-            
+            final errorDesc =
+                errorJson['error_description'] ?? 'no description';
+            session.log(
+              'exchangeAndStoreGmailToken: Error=$error, Description=$errorDesc',
+              level: LogLevel.error,
+            );
+
             // Common errors:
             // - "invalid_grant" = code already used or expired
             // - "redirect_uri_mismatch" = wrong redirect URI
             // - "invalid_client" = wrong client credentials
           } catch (_) {}
-          
+
           return false;
         }
 
@@ -287,43 +343,58 @@ class DashboardEndpoint extends Endpoint {
         final accessToken = tokenData['access_token'] as String?;
         final expiresIn = tokenData['expires_in'];
 
-        session.log('exchangeAndStoreGmailToken: accessToken=${accessToken != null}, refreshToken=${refreshToken != null}, expiresIn=$expiresIn', level: LogLevel.info);
+        session.log(
+          'exchangeAndStoreGmailToken: accessToken=${accessToken != null}, refreshToken=${refreshToken != null}, expiresIn=$expiresIn',
+          level: LogLevel.info,
+        );
 
         if (refreshToken == null) {
           session.log(
             'exchangeAndStoreGmailToken: No refresh_token returned! '
             'This happens when the user has previously authorized the app. '
             'User should revoke access at https://myaccount.google.com/permissions and try again.',
-            level: LogLevel.warning
+            level: LogLevel.warning,
           );
           return false;
         }
 
         // 3. Store Token
         await _storeRefreshTokenInternal(session, userId, refreshToken);
-        session.log('exchangeAndStoreGmailToken: SUCCESS - Token stored for userId=$userId', level: LogLevel.info);
-        
+        session.log(
+          'exchangeAndStoreGmailToken: SUCCESS - Token stored for userId=$userId',
+          level: LogLevel.info,
+        );
+
         // 4. Trigger immediate sync
         try {
           await _triggerSyncInternal(session, userId);
         } catch (e) {
-          session.log('exchangeAndStoreGmailToken: Sync trigger failed but token stored: $e', level: LogLevel.warning);
+          session.log(
+            'exchangeAndStoreGmailToken: Sync trigger failed but token stored: $e',
+            level: LogLevel.warning,
+          );
         }
-        
+
         return true;
-        
       } finally {
         httpClient.close();
       }
     } catch (e, stack) {
-      session.log('exchangeAndStoreGmailToken: Exception - $e', level: LogLevel.error, stackTrace: stack);
+      session.log(
+        'exchangeAndStoreGmailToken: Exception - $e',
+        level: LogLevel.error,
+        stackTrace: stack,
+      );
       return false;
     }
   }
 
-
   /// Internal helper to store token
-  Future<void> _storeRefreshTokenInternal(Session session, int userId, String refreshToken) async {
+  Future<void> _storeRefreshTokenInternal(
+    Session session,
+    int userId,
+    String refreshToken,
+  ) async {
     var userConfig = await UserConfig.db.findFirstRow(
       session,
       where: (t) => t.userInfoId.equals(userId),
@@ -347,13 +418,17 @@ class DashboardEndpoint extends Endpoint {
   Future<void> storeRefreshToken(Session session, String refreshToken) async {
     final userIdentifier = session.authenticated?.userIdentifier;
     if (userIdentifier == null) return;
-    await _storeRefreshTokenInternal(session, int.parse(userIdentifier), refreshToken);
+    await _storeRefreshTokenInternal(
+      session,
+      int.parse(userIdentifier),
+      refreshToken,
+    );
   }
 
   Future<SetupStatus> getSetupStatus(Session session, {int? userId}) async {
     // Try to get authenticated user, or use provided userId
     final userIdentifier = session.authenticated?.userIdentifier;
-    
+
     // If neither authenticated nor userId provided, return empty
     if (userIdentifier == null && userId == null) {
       return SetupStatus(
@@ -363,7 +438,7 @@ class DashboardEndpoint extends Endpoint {
         isSyncing: false,
       );
     }
-    
+
     final currentUserId = userId ?? int.parse(userIdentifier!);
 
     final userConfig = await UserConfig.db.findFirstRow(
@@ -378,9 +453,11 @@ class DashboardEndpoint extends Endpoint {
 
     return SetupStatus(
       hasToken: userConfig?.googleRefreshToken != null,
-      emailCount: 0, 
+      emailCount: 0,
       interactionCount: interactionCount,
-      isSyncing: userConfig?.lastSyncTime == null && userConfig?.googleRefreshToken != null,
+      isSyncing:
+          userConfig?.lastSyncTime == null &&
+          userConfig?.googleRefreshToken != null,
     );
   }
 }

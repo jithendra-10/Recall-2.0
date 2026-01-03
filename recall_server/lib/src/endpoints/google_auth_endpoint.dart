@@ -17,9 +17,9 @@ class GoogleAuthEndpoint extends Endpoint {
     // TODO: Move to config
     const clientId = 'YOUR_CLIENT_ID';
     const clientSecret = 'YOUR_CLIENT_SECRET';
-    // For mobile, redirectUri is often specific or null. 
+    // For mobile, redirectUri is often specific or null.
     // If using 'serverAuthCode' from google_sign_in, redirect_uri might need to be empty or matched.
-    const redirectUri = ''; 
+    const redirectUri = '';
 
     final response = await http.post(
       Uri.parse('https://oauth2.googleapis.com/token'),
@@ -33,13 +33,16 @@ class GoogleAuthEndpoint extends Endpoint {
     );
 
     if (response.statusCode != 200) {
-      session.log('Failed to exchange code: ${response.body}', level: LogLevel.error);
+      session.log(
+        'Failed to exchange code: ${response.body}',
+        level: LogLevel.error,
+      );
       return false;
     }
 
     final data = jsonDecode(response.body);
     final refreshToken = data['refresh_token'];
-    
+
     if (refreshToken == null) {
       session.log('No refresh token returned', level: LogLevel.warning);
       return false;
