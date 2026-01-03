@@ -25,6 +25,8 @@ abstract class Interaction
     this.contact,
     required this.date,
     required this.snippet,
+    this.subject,
+    this.body,
     required this.embedding,
     required this.type,
     this.sentiment,
@@ -37,6 +39,8 @@ abstract class Interaction
     _i2.Contact? contact,
     required DateTime date,
     required String snippet,
+    String? subject,
+    String? body,
     required _i1.Vector embedding,
     required String type,
     String? sentiment,
@@ -54,6 +58,8 @@ abstract class Interaction
             ),
       date: _i1.DateTimeJsonExtension.fromJson(jsonSerialization['date']),
       snippet: jsonSerialization['snippet'] as String,
+      subject: jsonSerialization['subject'] as String?,
+      body: jsonSerialization['body'] as String?,
       embedding: _i1.VectorJsonExtension.fromJson(
         jsonSerialization['embedding'],
       ),
@@ -79,6 +85,10 @@ abstract class Interaction
 
   String snippet;
 
+  String? subject;
+
+  String? body;
+
   _i1.Vector embedding;
 
   String type;
@@ -98,6 +108,8 @@ abstract class Interaction
     _i2.Contact? contact,
     DateTime? date,
     String? snippet,
+    String? subject,
+    String? body,
     _i1.Vector? embedding,
     String? type,
     String? sentiment,
@@ -112,6 +124,8 @@ abstract class Interaction
       if (contact != null) 'contact': contact?.toJson(),
       'date': date.toJson(),
       'snippet': snippet,
+      if (subject != null) 'subject': subject,
+      if (body != null) 'body': body,
       'embedding': embedding.toJson(),
       'type': type,
       if (sentiment != null) 'sentiment': sentiment,
@@ -128,6 +142,8 @@ abstract class Interaction
       if (contact != null) 'contact': contact?.toJsonForProtocol(),
       'date': date.toJson(),
       'snippet': snippet,
+      if (subject != null) 'subject': subject,
+      if (body != null) 'body': body,
       'embedding': embedding.toJson(),
       'type': type,
       if (sentiment != null) 'sentiment': sentiment,
@@ -174,6 +190,8 @@ class _InteractionImpl extends Interaction {
     _i2.Contact? contact,
     required DateTime date,
     required String snippet,
+    String? subject,
+    String? body,
     required _i1.Vector embedding,
     required String type,
     String? sentiment,
@@ -184,6 +202,8 @@ class _InteractionImpl extends Interaction {
          contact: contact,
          date: date,
          snippet: snippet,
+         subject: subject,
+         body: body,
          embedding: embedding,
          type: type,
          sentiment: sentiment,
@@ -200,6 +220,8 @@ class _InteractionImpl extends Interaction {
     Object? contact = _Undefined,
     DateTime? date,
     String? snippet,
+    Object? subject = _Undefined,
+    Object? body = _Undefined,
     _i1.Vector? embedding,
     String? type,
     Object? sentiment = _Undefined,
@@ -211,6 +233,8 @@ class _InteractionImpl extends Interaction {
       contact: contact is _i2.Contact? ? contact : this.contact?.copyWith(),
       date: date ?? this.date,
       snippet: snippet ?? this.snippet,
+      subject: subject is String? ? subject : this.subject,
+      body: body is String? ? body : this.body,
       embedding: embedding ?? this.embedding.clone(),
       type: type ?? this.type,
       sentiment: sentiment is String? ? sentiment : this.sentiment,
@@ -238,6 +262,16 @@ class InteractionUpdateTable extends _i1.UpdateTable<InteractionTable> {
 
   _i1.ColumnValue<String, String> snippet(String value) => _i1.ColumnValue(
     table.snippet,
+    value,
+  );
+
+  _i1.ColumnValue<String, String> subject(String? value) => _i1.ColumnValue(
+    table.subject,
+    value,
+  );
+
+  _i1.ColumnValue<String, String> body(String? value) => _i1.ColumnValue(
+    table.body,
     value,
   );
 
@@ -278,6 +312,14 @@ class InteractionTable extends _i1.Table<int?> {
       'snippet',
       this,
     );
+    subject = _i1.ColumnString(
+      'subject',
+      this,
+    );
+    body = _i1.ColumnString(
+      'body',
+      this,
+    );
     embedding = _i1.ColumnVector(
       'embedding',
       this,
@@ -305,6 +347,10 @@ class InteractionTable extends _i1.Table<int?> {
 
   late final _i1.ColumnString snippet;
 
+  late final _i1.ColumnString subject;
+
+  late final _i1.ColumnString body;
+
   late final _i1.ColumnVector embedding;
 
   late final _i1.ColumnString type;
@@ -331,6 +377,8 @@ class InteractionTable extends _i1.Table<int?> {
     contactId,
     date,
     snippet,
+    subject,
+    body,
     embedding,
     type,
     sentiment,

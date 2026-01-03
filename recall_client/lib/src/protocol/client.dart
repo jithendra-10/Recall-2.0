@@ -247,11 +247,11 @@ class EndpointDashboard extends _i2.EndpointRef {
   String get name => 'dashboard';
 
   /// Get complete dashboard data
-  _i3.Future<_i5.DashboardData> getDashboardData() =>
+  _i3.Future<_i5.DashboardData> getDashboardData({int? userId}) =>
       caller.callServerEndpoint<_i5.DashboardData>(
         'dashboard',
         'getDashboardData',
-        {},
+        {'userId': userId},
       );
 
   /// Get all contacts for the user
@@ -271,7 +271,7 @@ class EndpointDashboard extends _i2.EndpointRef {
     {'contactId': contactId},
   );
 
-  /// Trigger manual sync
+  /// Trigger manual sync - gets userId from session
   _i3.Future<void> triggerSync() => caller.callServerEndpoint<void>(
     'dashboard',
     'triggerSync',
@@ -279,6 +279,7 @@ class EndpointDashboard extends _i2.EndpointRef {
   );
 
   /// Exchange auth code for refresh token and store it
+  /// Returns detailed error info on failure for debugging
   _i3.Future<bool> exchangeAndStoreGmailToken(
     String authCode,
     int userId,
@@ -299,11 +300,11 @@ class EndpointDashboard extends _i2.EndpointRef {
         {'refreshToken': refreshToken},
       );
 
-  _i3.Future<_i8.SetupStatus> getSetupStatus() =>
+  _i3.Future<_i8.SetupStatus> getSetupStatus({int? userId}) =>
       caller.callServerEndpoint<_i8.SetupStatus>(
         'dashboard',
         'getSetupStatus',
-        {},
+        {'userId': userId},
       );
 }
 
@@ -327,6 +328,28 @@ class EndpointDebug extends _i2.EndpointRef {
     'debug',
     'clearTestData',
     {},
+  );
+}
+
+/// {@category Endpoint}
+class EndpointEmail extends _i2.EndpointRef {
+  EndpointEmail(_i2.EndpointCaller caller) : super(caller);
+
+  @override
+  String get name => 'email';
+
+  _i3.Future<bool> sendEmail(
+    String to,
+    String subject,
+    String body,
+  ) => caller.callServerEndpoint<bool>(
+    'email',
+    'sendEmail',
+    {
+      'to': to,
+      'subject': subject,
+      'body': body,
+    },
   );
 }
 
@@ -434,6 +457,7 @@ class Client extends _i2.ServerpodClientShared {
     jwtRefresh = EndpointJwtRefresh(this);
     dashboard = EndpointDashboard(this);
     debug = EndpointDebug(this);
+    email = EndpointEmail(this);
     googleAuth = EndpointGoogleAuth(this);
     recall = EndpointRecall(this);
     greeting = EndpointGreeting(this);
@@ -447,6 +471,8 @@ class Client extends _i2.ServerpodClientShared {
   late final EndpointDashboard dashboard;
 
   late final EndpointDebug debug;
+
+  late final EndpointEmail email;
 
   late final EndpointGoogleAuth googleAuth;
 
@@ -462,6 +488,7 @@ class Client extends _i2.ServerpodClientShared {
     'jwtRefresh': jwtRefresh,
     'dashboard': dashboard,
     'debug': debug,
+    'email': email,
     'googleAuth': googleAuth,
     'recall': recall,
     'greeting': greeting,

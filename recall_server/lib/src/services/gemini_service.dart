@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:serverpod/serverpod.dart';
+import 'package:dotenv/dotenv.dart';
 
 /// Gemini AI Service for summarization and embeddings
 class GeminiService {
-  static const String _apiKey = 'AIzaSyCrq16FJotEgCe3Rypuex69SbCB4fg2B8o';
+  static final _env = DotEnv(includePlatformEnvironment: true)..load();
+  static String get _apiKey => _env['GEMINI_API_KEY'] ?? '';
   static const String _baseUrl = 'https://generativelanguage.googleapis.com/v1beta';
   
   /// Analyze email content using strict logic and return structured data

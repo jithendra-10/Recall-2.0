@@ -33,10 +33,21 @@ class GmailSyncFutureCall extends FutureCall {
 
     await _loadCredentials();
 
-    // Fetch all users with a Google Refresh Token
+    // Check if we are syncing a specific user
+    int? targetedUserId;
+    if (object is UserConfig) {
+      targetedUserId = object.userInfoId;
+      session.log('Targeting specific user via UserConfig: $targetedUserId', level: LogLevel.info);
+    } else if (object is int) {
+      // Fallback if int is somehow allowed in future versions
+      targetedUserId = object;
+    }
+
+    // Fetch users with a Google Refresh Token
     final users = await UserConfig.db.find(
       session,
-      where: (t) => t.googleRefreshToken.notEquals(null),
+      where: (t) => t.googleRefreshToken.notEquals(null) & 
+                   (targetedUserId != null ? t.userInfoId.equals(targetedUserId) : Constant.bool(true)),
     );
 
     session.log('Found ${users.length} users with Gmail tokens', level: LogLevel.info);
@@ -76,10 +87,15 @@ class GmailSyncFutureCall extends FutureCall {
       final gmailApi = gmail.GmailApi(authClient);
 
       // Build query for incremental sync
+      // Build query
       String q = 'in:inbox OR in:sent';
       if (userConfig.lastSyncTime != null) {
+        // Incremental sync
         final seconds = userConfig.lastSyncTime!.millisecondsSinceEpoch ~/ 1000;
         q = '$q after:$seconds';
+      } else {
+        // First sync: Last 30 days
+        q = '$q newer_than:30d';
       }
 
       final listResponse = await gmailApi.users.messages.list(
@@ -114,22 +130,48 @@ class GmailSyncFutureCall extends FutureCall {
 
       session.log('Sync completed for user ${userConfig.userInfoId}', level: LogLevel.info);
 
+      session.log('Sync completed for user ${userConfig.userInfoId}', level: LogLevel.info);
+
     } finally {
       authClient.close();
+      
+      // Reset isSyncing flag
+      // Reload config to ensure we don't overwrite other parallel changes
+      try {
+        final currentConfig = await UserConfig.db.findFirstRow(
+          session,
+          where: (t) => t.id.equals(userConfig.id),
+        );
+        if (currentConfig != null) {
+          currentConfig.isSyncing = false;
+          // Also persist lastSyncTime if we set it in the try block (userConfig object might have it)
+          if (userConfig.lastSyncTime != null && currentConfig.lastSyncTime == null) {
+             currentConfig.lastSyncTime = userConfig.lastSyncTime;
+          }
+          await UserConfig.db.updateRow(session, currentConfig);
+        }
+      } catch (e) {
+        session.log('Failed to reset isSyncing flag: $e', level: LogLevel.error);
+      }
     }
   }
 
   bool _shouldFilterEmail(gmail.Message message) {
     final labels = message.labelIds ?? [];
     
-    // Filter spam, promotions, social, updates, forums
+    // Filter spam and specific categories
+    // User requested: "except automation mails, remaiing all mailes should be show"
+    // We interpret "automation" as Social, Updates, and Forums. Promotions are often semi-automated but might be desired?
+    // Let's filter strict automation categories.
     if (labels.contains('SPAM') || 
-        labels.contains('CATEGORY_PROMOTIONS') ||
         labels.contains('CATEGORY_SOCIAL') ||
         labels.contains('CATEGORY_UPDATES') ||
         labels.contains('CATEGORY_FORUMS')) {
       return true;
     }
+    // Note: We are ALLOWING 'CATEGORY_PROMOTIONS' for now as they might not be "automation" in the user's mind, 
+    // or we can add it to the list if "automation" implies all non-personal. 
+    // Safest bet for "automation" is Updates (transactional) and Social.
 
     // Filter by subject patterns (OTPs, automated messages)
     final subject = _getHeader(message, 'Subject')?.toLowerCase() ?? '';
@@ -257,7 +299,10 @@ class GmailSyncFutureCall extends FutureCall {
     );
     
     if (analysis == null) {
-      session.log('Email ignored by AI logic: ${message.id}', level: LogLevel.info);
+      session.log('Email ignored by AI logic: ${message.id} - Saving as raw interaction anyway', level: LogLevel.info);
+      // Fallback: Create interaction without AI tags so it at least appears
+      // Use snippet as summary
+      await _createRawInteraction(session, userConfig, contact, emailDate, subject, body, isSent, message.snippet ?? body);
       return;
     }
 
@@ -284,6 +329,8 @@ class GmailSyncFutureCall extends FutureCall {
       contactId: contact.id!,
       date: emailDate,
       snippet: formattedSnippet,
+      subject: subject,
+      body: body,
       type: isSent ? 'email_out' : 'email_in',
       embedding: Vector(paddedEmbedding),
     );
@@ -353,5 +400,37 @@ class GmailSyncFutureCall extends FutureCall {
       contact.healthScore = score;
       await Contact.db.updateRow(session, contact);
     }
+  }
+  Future<void> _createRawInteraction(
+      Session session, 
+      UserConfig userConfig, 
+      Contact contact, 
+      DateTime date, 
+      String subject, 
+      String body, 
+      bool isSent, 
+      String snippet,
+  ) async {
+      // 768-dim zero vector
+      final zeroEmbedding = List.filled(768, 0.0);
+      
+      final interaction = Interaction(
+        ownerId: userConfig.userInfoId,
+        contactId: contact.id!,
+        date: date,
+        snippet: snippet,
+        subject: subject,
+        body: body,
+        type: isSent ? 'email_out' : 'email_in',
+        embedding: Vector(zeroEmbedding),
+      );
+
+      await Interaction.db.insertRow(session, interaction);
+      
+      // Update contact last contacted
+      if (contact.lastContacted == null || date.isAfter(contact.lastContacted!)) {
+        contact.lastContacted = date;
+        await Contact.db.updateRow(session, contact);
+      }
   }
 }

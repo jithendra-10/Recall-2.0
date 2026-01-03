@@ -10,9 +10,13 @@ import 'src/generated/protocol.dart';
 import 'src/web/routes/app_config_route.dart';
 import 'src/web/routes/root.dart';
 import 'src/future_calls/gmail_sync_future_call.dart';
+import 'package:dotenv/dotenv.dart';
 
 /// The starting point of the Serverpod server.
 void run(List<String> args) async {
+  // Load environment variables
+  var env = DotEnv(includePlatformEnvironment: true)..load();
+
   // Initialize Serverpod and connect it with your generated code.
   final pod = Serverpod(args, Protocol(), Endpoints());
 
@@ -31,8 +35,8 @@ void run(List<String> args) async {
       GoogleIdpConfig(
         clientSecret: GoogleClientSecret.fromJson({
           'web': {
-            'client_id': '59154691355-q448tcg88mp3pg4pgsfhev4eje8q6nup.apps.googleusercontent.com',
-            'client_secret': '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',
+            'client_id': env['GOOGLE_CLIENT_ID']!,
+            'client_secret': env['GOOGLE_CLIENT_SECRET']!,
             'redirect_uris': [
               'http://localhost:8082/googlesignin',
               'http://192.168.88.194.nip.io:8082/googlesignin',

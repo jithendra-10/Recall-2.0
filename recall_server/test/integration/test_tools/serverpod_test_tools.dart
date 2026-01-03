@@ -138,6 +138,8 @@ class TestEndpoints {
 
   late final _DebugEndpoint debug;
 
+  late final _EmailEndpoint email;
+
   late final _GoogleAuthEndpoint googleAuth;
 
   late final _RecallEndpoint recall;
@@ -165,6 +167,10 @@ class _InternalTestEndpoints extends TestEndpoints
       serializationManager,
     );
     debug = _DebugEndpoint(
+      endpoints,
+      serializationManager,
+    );
+    email = _EmailEndpoint(
       endpoints,
       serializationManager,
     );
@@ -484,8 +490,9 @@ class _DashboardEndpoint {
   final _i2.SerializationManager _serializationManager;
 
   _i3.Future<_i5.DashboardData> getDashboardData(
-    _i1.TestSessionBuilder sessionBuilder,
-  ) async {
+    _i1.TestSessionBuilder sessionBuilder, {
+    int? userId,
+  }) async {
     return _i1.callAwaitableFunctionAndHandleExceptions(() async {
       var _localUniqueSession =
           (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
@@ -497,7 +504,7 @@ class _DashboardEndpoint {
           createSessionCallback: (_) => _localUniqueSession,
           endpointPath: 'dashboard',
           methodName: 'getDashboardData',
-          parameters: _i1.testObjectToJson({}),
+          parameters: _i1.testObjectToJson({'userId': userId}),
           serializationManager: _serializationManager,
         );
         var _localReturnValue =
@@ -669,8 +676,9 @@ class _DashboardEndpoint {
   }
 
   _i3.Future<_i8.SetupStatus> getSetupStatus(
-    _i1.TestSessionBuilder sessionBuilder,
-  ) async {
+    _i1.TestSessionBuilder sessionBuilder, {
+    int? userId,
+  }) async {
     return _i1.callAwaitableFunctionAndHandleExceptions(() async {
       var _localUniqueSession =
           (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
@@ -682,7 +690,7 @@ class _DashboardEndpoint {
           createSessionCallback: (_) => _localUniqueSession,
           endpointPath: 'dashboard',
           methodName: 'getSetupStatus',
-          parameters: _i1.testObjectToJson({}),
+          parameters: _i1.testObjectToJson({'userId': userId}),
           serializationManager: _serializationManager,
         );
         var _localReturnValue =
@@ -760,6 +768,54 @@ class _DebugEndpoint {
                   _localCallContext.arguments,
                 )
                 as _i3.Future<String>);
+        return _localReturnValue;
+      } finally {
+        await _localUniqueSession.close();
+      }
+    });
+  }
+}
+
+class _EmailEndpoint {
+  _EmailEndpoint(
+    this._endpointDispatch,
+    this._serializationManager,
+  );
+
+  final _i2.EndpointDispatch _endpointDispatch;
+
+  final _i2.SerializationManager _serializationManager;
+
+  _i3.Future<bool> sendEmail(
+    _i1.TestSessionBuilder sessionBuilder,
+    String to,
+    String subject,
+    String body,
+  ) async {
+    return _i1.callAwaitableFunctionAndHandleExceptions(() async {
+      var _localUniqueSession =
+          (sessionBuilder as _i1.InternalTestSessionBuilder).internalBuild(
+            endpoint: 'email',
+            method: 'sendEmail',
+          );
+      try {
+        var _localCallContext = await _endpointDispatch.getMethodCallContext(
+          createSessionCallback: (_) => _localUniqueSession,
+          endpointPath: 'email',
+          methodName: 'sendEmail',
+          parameters: _i1.testObjectToJson({
+            'to': to,
+            'subject': subject,
+            'body': body,
+          }),
+          serializationManager: _serializationManager,
+        );
+        var _localReturnValue =
+            await (_localCallContext.method.call(
+                  _localUniqueSession,
+                  _localCallContext.arguments,
+                )
+                as _i3.Future<bool>);
         return _localReturnValue;
       } finally {
         await _localUniqueSession.close();

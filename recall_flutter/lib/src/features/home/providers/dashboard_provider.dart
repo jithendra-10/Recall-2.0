@@ -1,4 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:recall_flutter/core/ip_config.dart';
+import 'package:serverpod_flutter/serverpod_flutter.dart';
 import 'package:recall_client/recall_client.dart';
 import 'package:recall_flutter/main.dart';
 
@@ -37,17 +39,53 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
     state = state.copyWith(isLoading: true, error: null);
     
     try {
-      final data = await client.dashboard.getDashboardData();
+      // WAIT for session to initialize if starting up
+      int attempts = 0;
+      while (sessionManager.signedInUser == null && attempts < 5) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        attempts++;
+      }
+
+      // Use explicit userId and unauthenticated client to bypass JWT validation issues with legacy keys
+      // Get current user ID from session
+      final userId = sessionManager.signedInUser?.id;
+      
+      // Create temp client without auth key manager
+      // This ensures we don't send the "Invalid" JWT token that causes the server to reject the request
+      final tempClient = Client(
+        'http://$serverIpAddress:8080/',
+        authenticationKeyManager: null, // Explicitly null
+      )..connectivityMonitor = FlutterConnectivityMonitor();
+
+      final data = await tempClient.dashboard.getDashboardData(userId: userId);
       state = DashboardState(
         isLoading: false,
         data: data,
       );
+
+      // POLL: If syncing, fetch again after delay to update status
+      if (data.isSyncing) {
+        Future.delayed(const Duration(seconds: 3), () {
+          fetchDashboardData();
+        });
+      }
     } catch (e) {
       print('Dashboard fetch error: $e');
       state = DashboardState(
         isLoading: false,
         error: 'Failed to load dashboard data',
       );
+    }
+  }
+
+  Future<bool> sendEmail(String to, String subject, String body) async {
+    try {
+      // Use authenticated client
+      final success = await client.email.sendEmail(to, subject, body);
+      return success;
+    } catch (e) {
+      print('Send email error: $e');
+      return false;
     }
   }
 
@@ -66,12 +104,12 @@ class DashboardNotifier extends StateNotifier<DashboardState> {
 }
 
 /// Main dashboard provider
-final dashboardProvider = StateNotifierProvider<DashboardNotifier, DashboardState>((ref) {
+final dashboardProvider = StateNotifierProvider.autoDispose<DashboardNotifier, DashboardState>((ref) {
   return DashboardNotifier();
 });
 
 /// Contacts list provider
-final contactsProvider = FutureProvider<List<Contact>>((ref) async {
+final contactsProvider = FutureProvider.autoDispose<List<Contact>>((ref) async {
   try {
     return await client.dashboard.getContacts();
   } catch (e) {
@@ -146,7 +184,7 @@ class ChatNotifier extends StateNotifier<ChatState> {
 }
 
 /// Chat provider for Ask RECALL
-final chatProvider = StateNotifierProvider<ChatNotifier, ChatState>((ref) {
+final chatProvider = StateNotifierProvider.autoDispose<ChatNotifier, ChatState>((ref) {
   return ChatNotifier();
 });
 

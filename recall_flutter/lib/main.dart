@@ -1,3 +1,5 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 import 'package:recall_client/recall_client.dart';
 import 'package:flutter/material.dart';
 import 'package:serverpod_flutter/serverpod_flutter.dart';
@@ -15,9 +17,11 @@ late final SessionManager sessionManager;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
 
   // Initialize client immediately without waiting for server
   final serverUrl = 'http://$serverIpAddress:8080/';
+  print('Recall: Connecting to server at $serverUrl');
 
   client = Client(
     serverUrl,

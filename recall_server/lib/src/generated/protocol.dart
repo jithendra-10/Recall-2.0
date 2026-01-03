@@ -179,6 +179,18 @@ class Protocol extends _i1.SerializationManagerServer {
           dartType: 'String',
         ),
         _i2.ColumnDefinition(
+          name: 'subject',
+          columnType: _i2.ColumnType.text,
+          isNullable: true,
+          dartType: 'String?',
+        ),
+        _i2.ColumnDefinition(
+          name: 'body',
+          columnType: _i2.ColumnType.text,
+          isNullable: true,
+          dartType: 'String?',
+        ),
+        _i2.ColumnDefinition(
           name: 'embedding',
           columnType: _i2.ColumnType.vector,
           isNullable: false,
@@ -278,6 +290,12 @@ class Protocol extends _i1.SerializationManagerServer {
           columnType: _i2.ColumnType.text,
           isNullable: true,
           dartType: 'String?',
+        ),
+        _i2.ColumnDefinition(
+          name: 'isSyncing',
+          columnType: _i2.ColumnType.boolean,
+          isNullable: true,
+          dartType: 'bool?',
         ),
       ],
       foreignKeys: [],

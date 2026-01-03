@@ -12,22 +12,50 @@ class DashboardEndpoint extends Endpoint {
   bool get requireLogin => false;
 
   /// Get complete dashboard data
-  Future<DashboardData> getDashboardData(Session session) async {
+  Future<DashboardData> getDashboardData(Session session, {int? userId}) async {
     try {
-      // Try to get authenticated user, fall back to test user
+      // Try to get authenticated user, or use provided userId, or fall back to test user
       final userIdentifier = session.authenticated?.userIdentifier;
-      final userId = userIdentifier != null ? int.parse(userIdentifier) : 1; // Use test user if not authenticated
+      // CRITICAL FIX: Do NOT fallback to 1. If not authenticated and no userId provided, return empty.
+      if (userIdentifier == null && userId == null) {
+         return DashboardData(
+          lastSyncTime: null,
+          isSyncing: false,
+          nudgeContact: null,
+          nudgeDaysSilent: null,
+          nudgeLastTopic: null,
+          recentInteractions: [],
+          topContacts: [],
+          totalContacts: 0,
+          driftingCount: 0,
+        );
+      }
+      final currentUserId = userId ?? int.parse(userIdentifier!);
 
       // Get user config for sync status
       final userConfig = await UserConfig.db.findFirstRow(
         session,
-        where: (t) => t.userInfoId.equals(userId),
+        where: (t) => t.userInfoId.equals(currentUserId),
       );
 
-      // Get top nudge contact (lowest health score)
+      // AUTO-SYNC: If user has token but never synced (or manually cleared), trigger sync now
+      bool autoSyncTriggered = false;
+      if (userConfig != null && 
+          userConfig.googleRefreshToken != null && 
+          (userConfig.lastSyncTime == null || 
+           DateTime.now().toUtc().difference(userConfig.lastSyncTime!).inMinutes > 3)) {
+        session.log('getDashboardData: Auto-triggering first sync for userId=$currentUserId', level: LogLevel.info);
+        autoSyncTriggered = true;
+        // Run sync in background (don't await to avoid blocking dashboard load)
+        _triggerSyncInternal(session, currentUserId).catchError((e) {
+          session.log('getDashboardData: Background sync error: $e', level: LogLevel.warning);
+        });
+      }
+
+      // Get recent interactions for memory feed
       final nudgeContact = await Contact.db.findFirstRow(
         session,
-        where: (t) => t.ownerId.equals(userId),
+        where: (t) => t.ownerId.equals(currentUserId),
         orderBy: (t) => t.healthScore,
         orderDescending: false,
       );
@@ -41,7 +69,7 @@ class DashboardEndpoint extends Endpoint {
         // Get last interaction topic
         final lastInteraction = await Interaction.db.findFirstRow(
           session,
-          where: (t) => t.ownerId.equals(userId) & t.contactId.equals(nudgeContact.id!),
+          where: (t) => t.ownerId.equals(currentUserId) & t.contactId.equals(nudgeContact.id!),
           orderBy: (t) => t.date,
           orderDescending: true,
         );
@@ -51,7 +79,7 @@ class DashboardEndpoint extends Endpoint {
       // Get recent interactions for memory feed
       final recentInteractionsRaw = await Interaction.db.find(
         session,
-        where: (t) => t.ownerId.equals(userId),
+        where: (t) => t.ownerId.equals(currentUserId),
         orderBy: (t) => t.date,
         orderDescending: true,
         limit: 10,
@@ -61,7 +89,10 @@ class DashboardEndpoint extends Endpoint {
       final recentInteractions = recentInteractionsRaw.map((i) => InteractionSummary(
         contactName: i.contact?.name ?? i.contact?.email ?? 'Unknown',
         contactEmail: i.contact?.email ?? '',
+        contactAvatarUrl: i.contact?.avatarUrl,
         summary: i.snippet,
+        subject: i.subject,
+        body: i.body,
         timestamp: i.date,
         type: i.type,
       )).toList();
@@ -85,7 +116,7 @@ class DashboardEndpoint extends Endpoint {
 
       return DashboardData(
         lastSyncTime: userConfig?.lastSyncTime,
-        isSyncing: false,
+        isSyncing: (userConfig?.isSyncing ?? false) || autoSyncTriggered,
         nudgeContact: nudgeContact,
         nudgeDaysSilent: nudgeDaysSilent,
         nudgeLastTopic: nudgeLastTopic,
@@ -152,42 +183,42 @@ class DashboardEndpoint extends Endpoint {
     )).toList();
   }
 
-  /// Trigger manual sync for a user
-  /// If userId is provided, use it directly (for unauthenticated contexts)
-  /// Otherwise try to get from session
-  Future<void> triggerSync(Session session, {int? userId}) async {
-    // Get userId from parameter or session
-    int? targetUserId = userId;
-    if (targetUserId == null) {
-      final userIdentifier = session.authenticated?.userIdentifier;
-      if (userIdentifier == null) {
-        session.log('triggerSync: No userId and no authenticated session', level: LogLevel.warning);
-        return;
-      }
-      targetUserId = int.parse(userIdentifier);
-    }
+  /// Trigger manual sync - gets userId from session
+  Future<void> triggerSync(Session session) async {
+    final userIdentifier = session.authenticated?.userIdentifier;
+    if (userIdentifier == null) throw Exception('User not authenticated');
+    final userId = int.parse(userIdentifier);
+    await _triggerSyncInternal(session, userId);
+  }
 
-    session.log('triggerSync: Starting for userId=$targetUserId', level: LogLevel.info);
+  /// Internal sync trigger that accepts userId directly (for unauthenticated contexts)
+  Future<void> _triggerSyncInternal(Session session, int userId) async {
+    session.log('_triggerSyncInternal: Scheduling sync for userId=$userId', level: LogLevel.info);
     
     final userConfig = await UserConfig.db.findFirstRow(
       session,
-      where: (t) => t.userInfoId.equals(targetUserId!),
+      where: (t) => t.userInfoId.equals(userId),
     );
 
     if (userConfig == null || userConfig.googleRefreshToken == null) {
-      session.log('triggerSync: No Gmail connection for userId=$targetUserId', level: LogLevel.warning);
+      session.log('_triggerSyncInternal: No Gmail connection for userId=$userId', level: LogLevel.warning);
       return;
     }
 
-    // Actually invoke the Gmail sync future call
-    try {
-      final gmailSync = GmailSyncFutureCall();
-      await gmailSync.invoke(session, null);
-      session.log('triggerSync: Gmail sync completed for userId=$targetUserId', level: LogLevel.info);
-    } catch (e, stack) {
-      session.log('triggerSync: Gmail sync failed: $e', level: LogLevel.error, stackTrace: stack);
-    }
+    // Set syncing status to true immediately for UI feedback
+    userConfig.isSyncing = true;
+    await UserConfig.db.updateRow(session, userConfig);
+
+    // Schedule the future call to run safely in background (detached from this HTTP session)
+    // passing userConfig object as the payload (it is SerializableEntity)
+    // Using registered name 'gmail_sync' from server.dart
+    await Serverpod.instance!.futureCallWithDelay(
+      'gmail_sync',
+      userConfig,
+      const Duration(seconds: 0),
+    );
   }
+
 
   /// Exchange auth code for refresh token and store it
   /// Returns detailed error info on failure for debugging
@@ -274,7 +305,7 @@ class DashboardEndpoint extends Endpoint {
         
         // 4. Trigger immediate sync
         try {
-          await triggerSync(session, userId: userId);
+          await _triggerSyncInternal(session, userId);
         } catch (e) {
           session.log('exchangeAndStoreGmailToken: Sync trigger failed but token stored: $e', level: LogLevel.warning);
         }
@@ -319,18 +350,30 @@ class DashboardEndpoint extends Endpoint {
     await _storeRefreshTokenInternal(session, int.parse(userIdentifier), refreshToken);
   }
 
-  Future<SetupStatus> getSetupStatus(Session session) async {
+  Future<SetupStatus> getSetupStatus(Session session, {int? userId}) async {
+    // Try to get authenticated user, or use provided userId
     final userIdentifier = session.authenticated?.userIdentifier;
-    final userId = userIdentifier != null ? int.parse(userIdentifier) : 1;
+    
+    // If neither authenticated nor userId provided, return empty
+    if (userIdentifier == null && userId == null) {
+      return SetupStatus(
+        hasToken: false,
+        emailCount: 0,
+        interactionCount: 0,
+        isSyncing: false,
+      );
+    }
+    
+    final currentUserId = userId ?? int.parse(userIdentifier!);
 
     final userConfig = await UserConfig.db.findFirstRow(
       session,
-      where: (t) => t.userInfoId.equals(userId),
+      where: (t) => t.userInfoId.equals(currentUserId),
     );
 
     final interactionCount = await Interaction.db.count(
       session,
-      where: (t) => t.ownerId.equals(userId),
+      where: (t) => t.ownerId.equals(currentUserId),
     );
 
     return SetupStatus(

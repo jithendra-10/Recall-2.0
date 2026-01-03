@@ -39,16 +39,16 @@ class _SignInScreenState extends ConsumerState<SignInScreen>
     });
 
     try {
-      final success = await ref.read(authControllerProvider).signInWithGoogle();
+      final error = await ref.read(authControllerProvider).signInWithGoogle();
 
-      if (success && mounted) {
+      if (error == null && mounted) {
         // Navigate to setup screen (loading animation)
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (_) => const SetupScreen()),
         );
       } else if (mounted) {
         setState(() {
-          _errorMessage = 'Sign in was cancelled or failed';
+          _errorMessage = error ?? 'Sign in failed';
           _isLoading = false;
         });
       }

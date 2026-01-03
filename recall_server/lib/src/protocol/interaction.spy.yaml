@@ -6,7 +6,11 @@ fields:
   date: DateTime
   
   # The raw content (snippet)
-  snippet: String 
+  snippet: String
+  
+  # Full email content
+  subject: String?
+  body: String? 
   
   # The Vector Embedding (Serverpod 3.0 Syntax)
   # 768 is the dimension size for Gemini embeddings

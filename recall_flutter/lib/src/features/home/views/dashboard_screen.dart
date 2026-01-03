@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' as dart_ui;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:recall_client/recall_client.dart';
 import 'package:recall_flutter/src/features/auth/views/splash_screen.dart';
@@ -7,10 +8,11 @@ import 'package:recall_flutter/main.dart';
 import 'package:recall_client/src/protocol/dashboard_data.dart';
 import 'package:recall_client/src/protocol/interaction_summary.dart';
 import 'package:recall_client/src/protocol/contact.dart';
-import 'package:recall_client/src/protocol/chat_message.dart';
+
 import '../providers/dashboard_provider.dart';
 import 'coming_soon_screen.dart';
 import 'ask_recall_screen.dart';
+import 'profile_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -202,46 +204,115 @@ class _HomeTab extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final dashboardState = ref.watch(dashboardProvider);
+    final isLoading = dashboardState.isLoading;
+    final isSyncing = dashboardState.data?.isSyncing ?? false;
+    final showLoadingOverlay = isLoading || isSyncing;
 
     return SafeArea(
-      child: RefreshIndicator(
-        onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
-        color: AppColors.primary,
-        backgroundColor: const Color(0xFF1A1F24),
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              _Header(
-                greeting: greeting,
-                userFullName: userFullName,
-                userFirstName: userFirstName,
-                userImageUrl: userImageUrl,
+      child: Stack(
+        children: [
+          // Main Content
+          RefreshIndicator(
+            onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
+            color: AppColors.primary,
+            backgroundColor: const Color(0xFF1A1F24),
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  _Header(
+                    greeting: greeting,
+                    userFullName: userFullName,
+                    userFirstName: userFirstName,
+                    userImageUrl: userImageUrl,
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // Butler Status Card
+                  _ButlerStatusCard(
+                    lastSyncTime: dashboardState.data?.lastSyncTime,
+                    isSyncing: isSyncing,
+                  ),
+                  const SizedBox(height: 20),
+                  
+                  // Content
+                  if (dashboardState.error != null)
+                     _ErrorState(error: dashboardState.error!)
+                  else if (dashboardState.data != null)
+                    _DashboardContent(data: dashboardState.data!)
+                  // Show content skeleton or learning state if no data yet (and not loading initial)
+                  else if (!isLoading) 
+                    const _LearningState(),
+                ],
               ),
-              const SizedBox(height: 20),
-              
-              // Butler Status Card
-              _ButlerStatusCard(
-                lastSyncTime: dashboardState.data?.lastSyncTime,
-                isSyncing: dashboardState.data?.isSyncing ?? false,
-              ),
-              const SizedBox(height: 20),
-              
-              // Loading or Content
-              if (dashboardState.isLoading)
-                const _LoadingState()
-              else if (dashboardState.error != null)
-                _ErrorState(error: dashboardState.error!)
-              else if (dashboardState.data != null)
-                _DashboardContent(data: dashboardState.data!)
-              else
-                const _LearningState(),
-            ],
+            ),
           ),
-        ),
+
+          // Blur Overlay & Loading Bar
+          if (showLoadingOverlay)
+            Positioned.fill(
+              child: Stack(
+                children: [
+                   // Blur Effect
+                   BackdropFilter(
+                    filter: dart_ui.ImageFilter.blur(sigmaX: 5.0, sigmaY: 5.0),
+                    child: Container(
+                      color: Colors.black.withOpacity(0.3),
+                    ),
+                  ),
+                  // Loading Bar
+                  if (isLoading)
+                    const Positioned(
+                      top: 0,
+                      left: 0,
+                      right: 0,
+                      child: LinearProgressIndicator(
+                        minHeight: 4,
+                        backgroundColor: Colors.transparent,
+                        color: AppColors.primary,
+                      ),
+                    ),
+                   // Sync Status Text Center
+                   if (isSyncing && !isLoading)
+                     Center(
+                       child: Container(
+                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                         decoration: BoxDecoration(
+                           color: const Color(0xFF1A1F24),
+                           borderRadius: BorderRadius.circular(30),
+                           border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+                           boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.3),
+                                blurRadius: 10,
+                                spreadRadius: 2,
+                              ),
+                           ],
+                         ),
+                         child: Row(
+                           mainAxisSize: MainAxisSize.min,
+                           children: [
+                             const SizedBox(
+                               width: 16,
+                               height: 16,
+                               child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                             ),
+                             const SizedBox(width: 12),
+                             const Text(
+                               'Syncing emails...',
+                               style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                             ),
+                           ],
+                         ),
+                       ),
+                     ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -250,36 +321,7 @@ class _HomeTab extends ConsumerWidget {
 // ============================================================================
 // LOADING STATE
 // ============================================================================
-class _LoadingState extends StatelessWidget {
-  const _LoadingState();
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(40),
-      child: Column(
-        children: [
-          const SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(
-              strokeWidth: 3,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            'Loading your relationship data...',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.6),
-              fontSize: 14,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 // ============================================================================
 // ERROR STATE
@@ -304,8 +346,10 @@ class _ErrorState extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              error,
-              style: const TextStyle(color: Colors.red, fontSize: 14),
+              'Error: $error',
+              style: const TextStyle(color: Colors.red, fontSize: 13),
+              maxLines: 4,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -372,48 +416,27 @@ class _DashboardContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final hasNudge = data.nudgeContact != null;
-    final hasInteractions = data.recentInteractions.isNotEmpty;
-    final hasContacts = data.topContacts.isNotEmpty;
-
-    if (!hasNudge && !hasInteractions && !hasContacts) {
-      return const _LearningState();
+    // Only show email feed if we have interactions, otherwise generic empty state or learning
+    // But user asked to remove other sections, so we focus on the list.
+    
+    if (data.recentInteractions.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 40),
+        child: Center(
+          child: Text(
+            'No emails found yet',
+            style: TextStyle(color: Colors.white54),
+          ),
+        ),
+      );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Primary Nudge Card
-        if (hasNudge) ...[
-          _PrimaryNudgeCard(
-            contact: data.nudgeContact!,
-            daysSilent: data.nudgeDaysSilent ?? 0,
-            lastTopic: data.nudgeLastTopic,
-          ),
-          const SizedBox(height: 24),
-        ],
-        
-        // Live Memory Feed
-        if (hasInteractions) ...[
-          const _SectionHeader(title: 'Recent Memory'),
-          const SizedBox(height: 12),
-          _LiveMemoryFeed(interactions: data.recentInteractions),
-          const SizedBox(height: 24),
-        ],
-        
-        // Relationship Health
-        if (hasContacts) ...[
-          _SectionHeader(
-            title: 'Relationship Health',
-            subtitle: '${data.driftingCount} drifting',
-          ),
-          const SizedBox(height: 12),
-          _RelationshipHealthSnapshot(contacts: data.topContacts),
-          const SizedBox(height: 24),
-        ],
-        
-        // Ask RECALL
-        const _AskRecallCard(),
+        const _SectionHeader(title: 'All Mails'),
+        const SizedBox(height: 16),
+        _EmailFeed(interactions: data.recentInteractions),
       ],
     );
   }
@@ -460,6 +483,7 @@ class _Header extends StatelessWidget {
                     ),
                     maxLines: 1,
                     textDirection: TextDirection.ltr,
+                    textScaler: MediaQuery.of(context).textScaler, // Fix for text scale
                   )..layout();
                   
                   final displayName = fullNamePainter.width <= constraints.maxWidth
@@ -482,24 +506,32 @@ class _Header extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 16),
-        Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: const Color(0xFF2B313A),
-            shape: BoxShape.circle,
-            border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 2),
+          GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFF2B313A),
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.primary.withOpacity(0.3), width: 2),
+              ),
+              child: userImageUrl != null
+                  ? ClipOval(
+                      child: Image.network(
+                        userImageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Color(0xFF9CA3AF), size: 22),
+                      ),
+                    )
+                  : const Icon(Icons.person, color: Color(0xFF9CA3AF), size: 22),
+            ),
           ),
-          child: userImageUrl != null
-              ? ClipOval(
-                  child: Image.network(
-                    userImageUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Icon(Icons.person, color: Color(0xFF9CA3AF), size: 22),
-                  ),
-                )
-              : const Icon(Icons.person, color: Color(0xFF9CA3AF), size: 22),
-        ),
       ],
     );
   }
@@ -600,283 +632,394 @@ class _ButlerStatusCard extends StatelessWidget {
 }
 
 // ============================================================================
-// PRIMARY NUDGE CARD
+// EMAIL FEED
 // ============================================================================
-class _PrimaryNudgeCard extends StatelessWidget {
-  final Contact contact;
-  final int daysSilent;
-  final String? lastTopic;
+class _EmailFeed extends StatelessWidget {
+  final List<InteractionSummary> interactions;
 
-  const _PrimaryNudgeCard({
-    required this.contact,
-    required this.daysSilent,
-    this.lastTopic,
-  });
-
-  Color get _healthColor {
-    final score = contact.healthScore;
-    if (score > 70) return const Color(0xFF22C55E);
-    if (score > 40) return const Color(0xFFFBBF24);
-    return const Color(0xFFEF4444);
-  }
+  const _EmailFeed({required this.interactions});
 
   @override
   Widget build(BuildContext context) {
-    final name = contact.name ?? contact.email;
-    final initials = name.isNotEmpty 
-        ? name.split(' ').take(2).map((w) => w.isNotEmpty ? w[0] : '').join().toUpperCase()
+    return Column(
+      children: interactions.map((i) => _EmailCard(interaction: i)).toList(),
+    );
+  }
+}
+
+class _EmailCard extends StatelessWidget {
+  final InteractionSummary interaction;
+
+  const _EmailCard({required this.interaction});
+
+  @override
+  Widget build(BuildContext context) {
+    final initials = interaction.contactName.isNotEmpty 
+        ? interaction.contactName.split(' ').take(2).map((w) => w.isNotEmpty ? w[0] : '').join().toUpperCase()
         : '?';
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1E2328), Color(0xFF1A1F24)],
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          barrierColor: Colors.black.withOpacity(0.4),
+          builder: (context) => _EmailDetailDialog(interaction: interaction),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E2328),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.2),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [_healthColor, _healthColor.withOpacity(0.7)],
-                  ),
-                  shape: BoxShape.circle,
-                ),
-                child: contact.avatarUrl != null
-                    ? ClipOval(
-                        child: Image.network(
-                          contact.avatarUrl!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Center(
-                            child: Text(
-                              initials,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-                    : Center(
-                        child: Text(
-                          initials,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      children: [
-                        Container(
-                          width: 6,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: _healthColor,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          '$daysSilent days since last contact',
-                          style: TextStyle(
-                            color: _healthColor,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              _HealthRing(score: contact.healthScore.round()),
-            ],
-          ),
-          if (lastTopic != null && lastTopic!.isNotEmpty) ...[
-            const SizedBox(height: 16),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Avatar
             Container(
-              padding: const EdgeInsets.all(14),
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
-                borderRadius: BorderRadius.circular(12),
+                color: const Color(0xFF2B313A),
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white.withOpacity(0.1)),
               ),
+              child: interaction.contactAvatarUrl != null
+                  ? ClipOval(
+                      child: Image.network(
+                        interaction.contactAvatarUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Center(
+                          child: Text(initials, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    )
+                  : Center(
+                      child: Text(
+                        initials,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+            ),
+            const SizedBox(width: 16),
+            
+            // Content
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Name and Time
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Icons.lightbulb_outline, color: AppColors.primary, size: 16),
-                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          interaction.contactName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                       Text(
-                        'Last discussed',
+                        _formatTime(interaction.timestamp),
                         style: TextStyle(
-                          color: AppColors.primary,
+                          color: Colors.white.withOpacity(0.4),
                           fontSize: 12,
-                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    lastTopic!,
-                    style: const TextStyle(
-                      color: Color(0xFFD1D5DB),
-                      fontSize: 14,
-                      height: 1.4,
+                  const SizedBox(height: 4),
+                  
+                  // Subject (Small light text)
+                  if (interaction.subject != null && interaction.subject!.isNotEmpty)
+                    Text(
+                      interaction.subject!,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.7),
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    maxLines: 3,
+                  
+                  const SizedBox(height: 4),
+                  
+                  // Snippet
+                  Text(
+                    interaction.summary, // Using snippet which is mapped to summary
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.4),
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _ActionButton(
-                  icon: Icons.visibility_outlined,
-                  label: 'View Context',
-                  isPrimary: false,
-                  onTap: () {},
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _ActionButton(
-                  icon: Icons.edit_outlined,
-                  label: 'Send Draft',
-                  isPrimary: true,
-                  onTap: () {},
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
+
+  String _formatTime(DateTime time) {
+    final diff = DateTime.now().toUtc().difference(time);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return '${diff.inDays}d';
+  }
 }
 
-class _HealthRing extends StatelessWidget {
-  final int score;
-  
-  const _HealthRing({required this.score});
+// ============================================================================
+// EMAIL DETAIL DIALOG
+// ============================================================================
+class _EmailDetailDialog extends ConsumerStatefulWidget {
+  final InteractionSummary interaction;
+
+  const _EmailDetailDialog({required this.interaction});
+
+  @override
+  ConsumerState<_EmailDetailDialog> createState() => _EmailDetailDialogState();
+}
+
+class _EmailDetailDialogState extends ConsumerState<_EmailDetailDialog> {
+  bool _isComposing = false;
+  final _subjectController = TextEditingController();
+  final _bodyController = TextEditingController();
+  bool _isSending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill composer for reply
+    _subjectController.text = 'Re: ${widget.interaction.subject ?? "Conversation"}';
+  }
 
   @override
   Widget build(BuildContext context) {
-    final color = score > 70 ? const Color(0xFF22C55E)
-        : score > 40 ? const Color(0xFFFBBF24)
-        : const Color(0xFFEF4444);
-    
-    return SizedBox(
-      width: 48,
-      height: 48,
-      child: Stack(
-        children: [
-          CircularProgressIndicator(
-            value: score / 100,
-            strokeWidth: 4,
-            backgroundColor: Colors.white.withOpacity(0.1),
-            valueColor: AlwaysStoppedAnimation(color),
+    return BackdropFilter(
+      filter: dart_ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+      child: Dialog(
+        backgroundColor: const Color(0xFF1E2328).withOpacity(0.9),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          constraints: const BoxConstraints(maxHeight: 600),
+          padding: const EdgeInsets.all(24),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 300),
+            child: _isComposing ? _buildComposeView() : _buildDetailView(),
           ),
-          Center(
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailView() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                widget.interaction.subject ?? 'No Subject',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white54),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'From: ${widget.interaction.contactName} <${widget.interaction.contactEmail}>',
+          style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+        ),
+        const Divider(color: Colors.white10, height: 32),
+        
+        // Body
+        Flexible(
+          child: SingleChildScrollView(
             child: Text(
-              '$score%',
+              widget.interaction.body ?? widget.interaction.summary,
               style: TextStyle(
-                color: color,
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+                color: Colors.white.withOpacity(0.9),
+                fontSize: 15,
+                height: 1.5,
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionButton extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool isPrimary;
-  final VoidCallback onTap;
-
-  const _ActionButton({
-    required this.icon,
-    required this.label,
-    required this.isPrimary,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          gradient: isPrimary
-              ? const LinearGradient(colors: [AppColors.primary, AppColors.secondary])
-              : null,
-          color: isPrimary ? null : Colors.white.withOpacity(0.06),
-          borderRadius: BorderRadius.circular(12),
-          border: isPrimary ? null : Border.all(color: Colors.white.withOpacity(0.1)),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+        
+        const SizedBox(height: 24),
+        
+        // Actions
+        Row(
           children: [
-            Icon(icon, color: isPrimary ? Colors.black : Colors.white, size: 18),
-            const SizedBox(width: 8),
-            Text(
-              label,
-              style: TextStyle(
-                color: isPrimary ? Colors.black : Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  // TODO: Implement AI summary logic properly
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('AI Summary: ${widget.interaction.summary}'),
+                      backgroundColor: const Color(0xFF1A1F24),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.visibility_outlined, size: 18),
+                label: const Text('View Context'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () => setState(() => _isComposing = true),
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: const Text('Send Draft'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
               ),
             ),
           ],
         ),
-      ),
+      ],
     );
+  }
+
+  Widget _buildComposeView() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Compose Draft',
+              style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white54),
+              onPressed: () => setState(() => _isComposing = false),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        
+        // Subject Field
+        TextField(
+          controller: _subjectController,
+          style: const TextStyle(color: Colors.white),
+          decoration: InputDecoration(
+            labelText: 'Subject',
+            labelStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+            enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+            focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        
+        // Body Field
+        Expanded(
+          child: TextField(
+            controller: _bodyController,
+            style: const TextStyle(color: Colors.white),
+            maxLines: null,
+            expands: true,
+            textAlignVertical: TextAlignVertical.top,
+            decoration: InputDecoration(
+              hintText: 'Write your message here...',
+              hintStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+              enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white.withOpacity(0.1))),
+              focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: AppColors.primary)),
+              contentPadding: const EdgeInsets.all(16),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        
+        // Send Button
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: _isSending ? null : _sendEmail,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            child: _isSending 
+                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : const Text('Send Email', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _sendEmail() async {
+    if (_bodyController.text.trim().isEmpty) return;
+
+    setState(() => _isSending = true);
+
+    final success = await ref.read(dashboardProvider.notifier).sendEmail(
+      widget.interaction.contactEmail,
+      _subjectController.text,
+      _bodyController.text,
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isSending = false);
+
+    if (success) {
+      Navigator.of(context).pop(); // Close dialog
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Email sent successfully!'), backgroundColor: Colors.green),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to send email. Need permission?'), backgroundColor: Colors.red),
+      );
+    }
   }
 }
 
@@ -885,341 +1028,17 @@ class _ActionButton extends StatelessWidget {
 // ============================================================================
 class _SectionHeader extends StatelessWidget {
   final String title;
-  final String? subtitle;
   
-  const _SectionHeader({required this.title, this.subtitle});
+  const _SectionHeader({required this.title});
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 17,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        if (subtitle != null)
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEF4444).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Text(
-              subtitle!,
-              style: const TextStyle(
-                color: Color(0xFFEF4444),
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-// ============================================================================
-// LIVE MEMORY FEED
-// ============================================================================
-class _LiveMemoryFeed extends StatelessWidget {
-  final List<InteractionSummary> interactions;
-
-  const _LiveMemoryFeed({required this.interactions});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: interactions.map((i) => _MemoryCard(interaction: i)).toList(),
-    );
-  }
-}
-
-class _MemoryCard extends StatelessWidget {
-  final InteractionSummary interaction;
-
-  const _MemoryCard({required this.interaction});
-
-  IconData get _icon {
-    switch (interaction.type) {
-      case 'email_in': return Icons.mail_outline;
-      case 'email_out': return Icons.send_outlined;
-      case 'meeting': return Icons.event_outlined;
-      default: return Icons.chat_outlined;
-    }
-  }
-
-  Color get _iconBg {
-    switch (interaction.type) {
-      case 'email_in': return const Color(0xFF3B82F6);
-      case 'email_out': return const Color(0xFF22C55E);
-      case 'meeting': return const Color(0xFFA855F7);
-      default: return const Color(0xFF6B7280);
-    }
-  }
-
-  String get _timeAgo {
-    final diff = DateTime.now().toUtc().difference(interaction.timestamp);
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${diff.inDays ~/ 7}w ago';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E2328),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: _iconBg.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(_icon, color: _iconBg, size: 18),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      interaction.contactName,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    Text(
-                      _timeAgo,
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.4),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  interaction.summary,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.6),
-                    fontSize: 13,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// RELATIONSHIP HEALTH SNAPSHOT
-// ============================================================================
-class _RelationshipHealthSnapshot extends StatelessWidget {
-  final List<Contact> contacts;
-
-  const _RelationshipHealthSnapshot({required this.contacts});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: contacts.map((c) => _ContactHealthCard(contact: c)).toList(),
-    );
-  }
-}
-
-class _ContactHealthCard extends StatelessWidget {
-  final Contact contact;
-
-  const _ContactHealthCard({required this.contact});
-
-  Color get _color {
-    final score = contact.healthScore;
-    if (score > 70) return const Color(0xFF22C55E);
-    if (score > 40) return const Color(0xFFFBBF24);
-    return const Color(0xFFEF4444);
-  }
-
-  String get _lastContactText {
-    if (contact.lastContacted == null) return 'Never';
-    final diff = DateTime.now().toUtc().difference(contact.lastContacted!);
-    if (diff.inDays < 1) return 'Today';
-    if (diff.inDays == 1) return 'Yesterday';
-    if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${diff.inDays ~/ 7}w ago';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final name = contact.name ?? contact.email;
-    final initial = name.isNotEmpty ? name[0].toUpperCase() : '?';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E2328),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _color.withOpacity(0.15),
-              shape: BoxShape.circle,
-            ),
-            child: Center(
-              child: Text(
-                initial,
-                style: TextStyle(
-                  color: _color,
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  _lastContactText,
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          SizedBox(
-            width: 60,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Text(
-                  '${contact.healthScore.round()}%',
-                  style: TextStyle(
-                    color: _color,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
-                  child: LinearProgressIndicator(
-                    value: contact.healthScore / 100,
-                    backgroundColor: Colors.white.withOpacity(0.1),
-                    valueColor: AlwaysStoppedAnimation(_color),
-                    minHeight: 4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// ASK RECALL CARD
-// ============================================================================
-class _AskRecallCard extends StatelessWidget {
-  const _AskRecallCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        // Navigate to Ask tab
-        final dashboardState = context.findAncestorStateOfType<_DashboardScreenState>();
-        dashboardState?.setState(() {
-          dashboardState._currentIndex = 1;
-        });
-      },
-      child: Container(
-        padding: const EdgeInsets.all(4),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              AppColors.primary.withOpacity(0.3),
-              AppColors.secondary.withOpacity(0.3),
-            ],
-          ),
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1F24),
-            borderRadius: BorderRadius.circular(14),
-          ),
-          child: Row(
-            children: [
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [AppColors.primary, AppColors.secondary],
-                ).createShader(bounds),
-                child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Ask RECALL: "What did I discuss with John?"',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.5),
-                    fontSize: 14,
-                  ),
-                ),
-              ),
-              Icon(
-                Icons.arrow_forward_ios,
-                color: Colors.white.withOpacity(0.3),
-                size: 16,
-              ),
-            ],
-          ),
-        ),
+    return Text(
+      title,
+      style: const TextStyle(
+        color: Colors.white,
+        fontSize: 18,
+        fontWeight: FontWeight.w600,
       ),
     );
   }

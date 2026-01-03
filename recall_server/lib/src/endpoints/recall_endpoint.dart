@@ -12,7 +12,15 @@ class RecallEndpoint extends Endpoint {
     try {
       // Try to get authenticated user, fall back to test user
       final userIdentifier = session.authenticated?.userIdentifier;
-      final userId = userIdentifier != null ? int.parse(userIdentifier) : 1;
+      if (userIdentifier == null) {
+        return ChatMessage(
+          role: 'assistant',
+          content: "Please sign in to ask questions.",
+          timestamp: DateTime.now().toUtc(),
+          sources: [],
+        );
+      }
+      final userId = int.parse(userIdentifier);
 
       session.log('Ask RECALL query: $query', level: LogLevel.info);
 

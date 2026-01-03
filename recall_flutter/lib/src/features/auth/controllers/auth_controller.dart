@@ -5,6 +5,7 @@ import 'package:recall_client/recall_client.dart';
 import 'package:serverpod_auth_google_flutter/serverpod_auth_google_flutter.dart';
 import '../../../../core/ip_config.dart';
 import '../../../../main.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Stores the currently signed-in Google user
 GoogleSignInAccount? currentGoogleUser;
@@ -19,6 +20,30 @@ class AuthController {
   final Ref ref;
 
   AuthController(this.ref);
+
+  /// interactive configuration - Forces fresh Auth Code for backend refresh token
+  GoogleSignIn get _googleSignInInteractive => GoogleSignIn(
+    scopes: [
+      'email',
+      'profile',
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.compose',
+    ],
+    serverClientId: dotenv.env['GOOGLE_CLIENT_ID'],
+    forceCodeForRefreshToken: true,
+  );
+
+  /// Silent configuration - Only needs ID Token for authentication, no new code needed
+  GoogleSignIn get _googleSignInSilent => GoogleSignIn(
+    scopes: [
+      'email',
+      'profile',
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/gmail.compose',
+    ],
+    serverClientId: dotenv.env['GOOGLE_CLIENT_ID'],
+    forceCodeForRefreshToken: false, // CRITICAL: Disable for silent sign-in to work reliable
+  );
 
   /// Check if user is already logged in
   static Future<bool> isLoggedIn() async {
@@ -39,60 +64,88 @@ class AuthController {
   /// Try to restore session silently
   Future<bool> tryAutoLogin() async {
     try {
+      print('tryAutoLogin: Initializing session manager...');
+      // 1. Ensure SessionManager is initialized (loads key from storage)
+      await sessionManager.initialize();
+      print('tryAutoLogin: Session initialized. Is Signed In? ${sessionManager.isSignedIn}');
+
+      // 2. Check if Serverpod considers us signed in
+      if (sessionManager.isSignedIn) {
+        print('Auto-login successful: User ${sessionManager.signedInUser?.id}');
+        
+        // Restore Google User (Silently) to keep client-side tokens fresh
+        try {
+          currentGoogleUser = await _googleSignInSilent.signInSilently();
+        } catch (e) {
+          print('Silent Google Sign-In refresh failed (non-fatal): $e');
+        }
+
+        return true;
+      } 
+      
+      // 3. If SessionManager is missing, attempt RECOVERY mechanism
+      print('tryAutoLogin: SessionManager missing. Attempting silent recovery via Google...');
+      
+      try {
+        // Attempt silent Google Sign-In to recover session
+        // Use SILENT config (no forced code)
+        final googleUser = await _googleSignInSilent.signInSilently();
+        
+        if (googleUser != null) {
+           print('tryAutoLogin: Silent Google success. Re-authenticating with Serverpod...');
+           currentGoogleUser = googleUser;
+           
+           final auth = await googleUser.authentication;
+           final idToken = auth.idToken;
+           
+           if (idToken != null) {
+             final serverAuth = await client.modules.auth.google.authenticateWithIdToken(idToken);
+             if (serverAuth.success) {
+               print('tryAutoLogin: RECOVERY SUCCESS! Session restored.');
+               await sessionManager.registerSignedInUser(
+                  serverAuth.userInfo!,
+                  serverAuth.keyId!,
+                  serverAuth.key!,
+               );
+               
+               // Persist local state again just in case
+               final prefs = await SharedPreferences.getInstance();
+               await prefs.setBool(_isLoggedInKey, true);
+               await prefs.setString(_userNameKey, googleUser.displayName ?? '');
+               
+               return true;
+             } else {
+                print('tryAutoLogin: Serverpod auth failed during recovery: ${serverAuth.failReason}');
+             }
+           } else {
+              print('tryAutoLogin: No ID Token from silent sign in');
+           }
+        } else {
+           print('tryAutoLogin: Google silent sign-in returned null (user likely revoked access or needs login)');
+        }
+      } catch (e) {
+        print('tryAutoLogin: Silent recovery error: $e');
+      }
+      
+      // 4. If all fails, we are NOT logged in. Clear state.
+      print('tryAutoLogin: Auto-login failed completely. Clearing prefs.');
       final prefs = await SharedPreferences.getInstance();
-      final isLoggedIn = prefs.getBool(_isLoggedInKey) ?? false;
-      
-      if (!isLoggedIn) return false;
-
-      final googleSignIn = GoogleSignIn(
-        scopes: [
-          'email',
-          'profile',
-          'https://www.googleapis.com/auth/gmail.readonly',
-        ],
-        serverClientId: '59154691355-q448tcg88mp3pg4pgsfhev4eje8q6nup.apps.googleusercontent.com',
-      );
-
-      // Try silent sign-in
-      final googleUser = await googleSignIn.signInSilently();
-      
-      if (googleUser != null) {
-        currentGoogleUser = googleUser;
-        print('Auto-login successful: ${googleUser.email}');
-        return true;
-      }
-      
-      // If silent sign-in fails but we have stored info, still consider logged in
-      final storedName = prefs.getString(_userNameKey);
-      if (storedName != null && storedName.isNotEmpty) {
-        print('Using stored user info for: $storedName');
-        return true;
-      }
+      await prefs.setBool(_isLoggedInKey, false);
       
       return false;
     } catch (e) {
-      print('Auto-login error: $e');
+      print('Auto-login critical error: $e');
       return false;
     }
   }
 
-  Future<bool> signInWithGoogle() async {
+  Future<String?> signInWithGoogle() async {
     try {
       print('=== Starting Google Sign-In ===');
-      
-      // Request Gmail API scope for offline access
-      final googleSignIn = GoogleSignIn(
-        scopes: [
-          'email',
-          'profile',
-          'https://www.googleapis.com/auth/gmail.readonly',
-        ],
-        serverClientId: '59154691355-q448tcg88mp3pg4pgsfhev4eje8q6nup.apps.googleusercontent.com',
-        forceCodeForRefreshToken: true, // CRITICAL: Always get fresh code for refresh token
-      );
+      // Use INTERACTIVE config for explicit sign in
+      final googleSignIn = _googleSignInInteractive;
 
       // IMPORTANT: Sign out first to ensure we get a FRESH serverAuthCode
-      // Cached sessions from signInSilently() may have already-consumed codes
       print('Signing out to force fresh auth code...');
       await googleSignIn.signOut();
 
@@ -100,49 +153,27 @@ class AuthController {
       final googleUser = await googleSignIn.signIn();
       
       if (googleUser == null) {
-        print('Sign-in cancelled by user or failed');
-        return false;
+        return 'Sign in cancelled by user';
       }
 
-      // Store the Google user globally
       currentGoogleUser = googleUser;
+      print('✓ Google user signed in: ${googleUser.email}');
 
-      // Save login state to SharedPreferences
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_isLoggedInKey, true);
-      await prefs.setString(_userNameKey, googleUser.displayName ?? '');
-      await prefs.setString(_userEmailKey, googleUser.email);
-      if (googleUser.photoUrl != null) {
-        await prefs.setString(_userPhotoKey, googleUser.photoUrl!);
-      }
-
-      print('✓ Google user signed in successfully!');
-      print('  Email: ${googleUser.email}');
-      print('  Name: ${googleUser.displayName}');
-      print('  Photo: ${googleUser.photoUrl}');
-
-      // Get tokens
       final auth = await googleUser.authentication;
       final idToken = auth.idToken;
       final authCode = googleUser.serverAuthCode;
 
       print('Server auth code: ${authCode != null ? "received" : "null"}');
-      print('ID Token: ${idToken != null ? "received" : "null"}');
       
       if (idToken == null) {
-        print('Error: Missing ID Token');
-        return false;
+        await signOut();
+        return 'Failed to retrieve ID Token from Google';
       }
 
       // Authenticate with Serverpod using ID Token
       try {
         print('Authenticating with Serverpod (ID Token)...');
-        // 'google' module usually exposes authenticateWithIdToken
-        // Check if the generated client matches this signature.
-        // Standard Serverpod Auth Google uses 'authenticateWithIdToken'
-        final serverAuth = await client.modules.auth.google.authenticateWithIdToken(
-          idToken,
-        );
+        final serverAuth = await client.modules.auth.google.authenticateWithIdToken(idToken);
         
         if (serverAuth.success) {
           print('✓ Serverpod authentication successful!');
@@ -152,50 +183,59 @@ class AuthController {
             serverAuth.key!,
           );
           
-          // Exchange Auth Code for Refresh Token (if available)
           if (authCode != null) {
             print('Exchanging auth code for Gmail refresh token...');
             try {
               final userId = serverAuth.userInfo!.id!;
-              // Use a temporary client WITHOUT auth headers to avoid JWT validation issues
-              // The server's JWT validation rejects legacy auth tokens
-              final tempClient = Client(
-                'http://$serverIpAddress:8080/',
-                // No authenticationKeyManager = no auth headers sent
-              );
-              final success = await tempClient.dashboard.exchangeAndStoreGmailToken(authCode, userId);
-              tempClient.close();
-              if (success) {
-                 print('✓ Gmail refresh token stored');
-              } else {
-                 print('Warning: Failed to store Gmail refresh token');
+              // Using main client which is now authenticated
+              final success = await client.dashboard.exchangeAndStoreGmailToken(authCode, userId);
+
+              if (!success) {
+                 await signOut();
+                 return 'Failed to store Gmail access. Please try again.';
               }
             } catch (e) {
               print('Gmail token exchange error: $e');
+              await signOut();
+              return 'Server connection failed during token exchange: $e';
             }
           }
         } else {
-           print('Serverpod authentication failed: ${serverAuth.failReason ?? "Unknown"}');
-           return false;
+           print('Serverpod authentication failed: ${serverAuth.failReason}');
+           await signOut();
+           return 'Backend authentication failed: ${serverAuth.failReason}';
         }
       } catch (e) {
         print('Serverpod auth error: $e');
-        return false;
+        await signOut();
+        return 'Server connection failed: $e';
       }
       
-      return true;
+      // === SUCCESS: ONLY NOW SAVE STATE ===
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_isLoggedInKey, true);
+      await prefs.setString(_userNameKey, googleUser.displayName ?? '');
+      await prefs.setString(_userEmailKey, googleUser.email);
+      if (googleUser.photoUrl != null) {
+        await prefs.setString(_userPhotoKey, googleUser.photoUrl!);
+      }
+
+      print('✓ Login Complete & Persisted');
+      return null; // Success
       
     } catch (e, stack) {
       print('Sign in error: $e');
-      print('Stack: $stack');
-      return false;
+      await signOut();
+      return 'Unexpected error: $e';
     }
   }
 
   /// Sign out
   Future<void> signOut() async {
-    final googleSignIn = GoogleSignIn();
-    await googleSignIn.signOut();
+    // Sign out of both configs just to be safe
+    try { await _googleSignInSilent.signOut(); } catch (_) {}
+    try { await _googleSignInInteractive.signOut(); } catch (_) {}
+    
     currentGoogleUser = null;
     
     // Clear stored login state

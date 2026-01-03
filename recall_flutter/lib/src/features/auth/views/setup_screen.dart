@@ -46,7 +46,8 @@ class _SetupScreenState extends State<SetupScreen> {
 
   Future<void> _checkStatus() async {
     try {
-      final status = await client.dashboard.getSetupStatus();
+      final userId = sessionManager.signedInUser?.id;
+      final status = await client.dashboard.getSetupStatus(userId: userId);
       if (!mounted) return;
 
       int nextStep = _currentStep;
@@ -88,6 +89,11 @@ class _SetupScreenState extends State<SetupScreen> {
       }
     } catch (e) {
       print('Setup polling error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Connection error: $e')),
+        );
+      }
     }
   }
 

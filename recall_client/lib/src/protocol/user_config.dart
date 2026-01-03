@@ -19,6 +19,7 @@ abstract class UserConfig implements _i1.SerializableModel {
     this.googleRefreshToken,
     this.lastSyncTime,
     this.gmailHistoryId,
+    this.isSyncing,
   });
 
   factory UserConfig({
@@ -27,6 +28,7 @@ abstract class UserConfig implements _i1.SerializableModel {
     String? googleRefreshToken,
     DateTime? lastSyncTime,
     String? gmailHistoryId,
+    bool? isSyncing,
   }) = _UserConfigImpl;
 
   factory UserConfig.fromJson(Map<String, dynamic> jsonSerialization) {
@@ -40,6 +42,7 @@ abstract class UserConfig implements _i1.SerializableModel {
               jsonSerialization['lastSyncTime'],
             ),
       gmailHistoryId: jsonSerialization['gmailHistoryId'] as String?,
+      isSyncing: jsonSerialization['isSyncing'] as bool?,
     );
   }
 
@@ -56,6 +59,8 @@ abstract class UserConfig implements _i1.SerializableModel {
 
   String? gmailHistoryId;
 
+  bool? isSyncing;
+
   /// Returns a shallow copy of this [UserConfig]
   /// with some or all fields replaced by the given arguments.
   @_i1.useResult
@@ -65,6 +70,7 @@ abstract class UserConfig implements _i1.SerializableModel {
     String? googleRefreshToken,
     DateTime? lastSyncTime,
     String? gmailHistoryId,
+    bool? isSyncing,
   });
   @override
   Map<String, dynamic> toJson() {
@@ -75,6 +81,7 @@ abstract class UserConfig implements _i1.SerializableModel {
       if (googleRefreshToken != null) 'googleRefreshToken': googleRefreshToken,
       if (lastSyncTime != null) 'lastSyncTime': lastSyncTime?.toJson(),
       if (gmailHistoryId != null) 'gmailHistoryId': gmailHistoryId,
+      if (isSyncing != null) 'isSyncing': isSyncing,
     };
   }
 
@@ -93,12 +100,14 @@ class _UserConfigImpl extends UserConfig {
     String? googleRefreshToken,
     DateTime? lastSyncTime,
     String? gmailHistoryId,
+    bool? isSyncing,
   }) : super._(
          id: id,
          userInfoId: userInfoId,
          googleRefreshToken: googleRefreshToken,
          lastSyncTime: lastSyncTime,
          gmailHistoryId: gmailHistoryId,
+         isSyncing: isSyncing,
        );
 
   /// Returns a shallow copy of this [UserConfig]
@@ -111,6 +120,7 @@ class _UserConfigImpl extends UserConfig {
     Object? googleRefreshToken = _Undefined,
     Object? lastSyncTime = _Undefined,
     Object? gmailHistoryId = _Undefined,
+    Object? isSyncing = _Undefined,
   }) {
     return UserConfig(
       id: id is int? ? id : this.id,
@@ -124,6 +134,7 @@ class _UserConfigImpl extends UserConfig {
       gmailHistoryId: gmailHistoryId is String?
           ? gmailHistoryId
           : this.gmailHistoryId,
+      isSyncing: isSyncing is bool? ? isSyncing : this.isSyncing,
     );
   }
 }

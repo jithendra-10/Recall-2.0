@@ -7,7 +7,9 @@ fields:
   # Last time we successfully synced their email
   lastSyncTime: DateTime?
   # The History ID from Gmail (to fetch only new emails)
-  gmailHistoryId: String? 
+  gmailHistoryId: String?
+  # Whether a sync is currently in progress
+  isSyncing: bool? 
 indexes:
   user_config_idx:
     fields: userInfoId

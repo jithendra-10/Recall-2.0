@@ -19,6 +19,8 @@ dashboard:
 debug:
   - seedTestData:
   - clearTestData:
+email:
+  - sendEmail:
 googleAuth:
   - exchangeCode:
 recall:
