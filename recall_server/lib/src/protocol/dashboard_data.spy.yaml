@@ -18,3 +18,4 @@ fields:
   # Stats
   totalContacts: int
   driftingCount: int
+  networkHealth: double?

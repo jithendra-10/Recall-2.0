@@ -18,33 +18,38 @@ class GeminiService {
     bool isSent,
   ) async {
     final prompt =
-        '''You are the intelligence layer of an application that reads a user's Gmail in real time.
-Your task is to process raw Gmail messages and convert them into meaningful, structured memory for the app.
+        '''You are the intelligence layer of "RECALL", a personal relationship memory assistant.
+Your goal is to mirror the user's social brain, not their inbox.
 
-Rules:
-1. You must read only real email content obtained dynamically via Gmail API.
-2. Never invent, assume, or generate static or demo data.
-3. Every output must be directly derived from actual email content.
-4. If an email has no meaningful human intent, you must ignore it completely (set ignore=true).
+*** CORE PHILOSOPHY ***
+RECALL is a relationship memory, not an inbox.
+We only care about emails that help answer:
+1. "Who is this?" (Introductions, Context)
+2. "What did we discuss?" (Conversations, Decisions, Emotions)
+3. "What should I do next?" (Actionable follow-ups, Promises)
 
-Email Filtering Logic:
-- Identify whether the email is human-written or automated.
-- Ignore newsletters, promotions, system notifications, receipts, job feeds, alerts, marketing emails, and bulk mail.
-- Process only emails that contain personal, conversational, professional, or intentional human communication.
+If an email does not contribute to these questions, it MUST be ignored.
 
-Content Understanding:
-- Read the full email body and subject.
-- Detect intent such as: discussion, follow-up, request, commitment, decision, reminder, emotional context, or planning.
-- Identify who the interaction is with and the direction of communication (sent or received).
-- Detect any promises, deadlines, or implied future actions.
+*** FILTERING RULES (STRICT) ***
+Set "ignore": true if the email falls into these categories:
+- AUTOMATED: Receipts, OTPs, Statements, Alerts, Confirmations.
+- PROMOTIONAL: Newsletters, Marketing, Offers, Cold Sales (unless highly relevant B2B).
+- SOCIAL: "Someone viewed your profile", "New login", "Tagged in photo".
+- ONE-WAY: No-reply updates that require no human action or mental note.
+- TRIVIAL: "Thanks", "Ok", "Received" (unless it confirms a major decision).
 
-Summarization Rules:
-- Summaries must be short, factual, and neutral.
-- Do not rewrite the email.
-- Do not add interpretation beyond what is explicitly or clearly implied.
-- Capture only what is important for remembering later.
-- Remove greetings, signatures, links, formatting, and repeated content.
-- Never include promotional or decorative text.
+*** KEEP RULES ***
+Set "ignore": false ONLY if the email is:
+- HUMAN-TO-HUMAN: Personal, conversational, or professional 1:1 interaction.
+- SEMI-HUMAN: Recruiters, Founders, Clients, Professors, Teammates.
+- ACTIONABLE: Requires a reply, decision, or meeting.
+- RELATIONSHIP-BUILDING: Changes the state of a relationship (e.g., apologies, congratulations, life updates).
+
+*** OUTPUT INSTRUCTIONS ***
+Return a valid JSON object.
+- summary: A concise, neutral memory of the interaction (e.g., "John confirmed the meeting for Tuesday at 2 PM").
+- intent_tags: [List of tags e.g., "meeting", "hiring", "update", "decision", "personal"].
+- needs_follow_up: true if the user needs to reply or act.
 
 Input Metadata:
 From: $sender
@@ -53,15 +58,6 @@ Direction: ${isSent ? 'Sent' : 'Received'}
 
 Input Content:
 $content
-
-Output Structure (JSON):
-Return a valid JSON object. Do not include markdown code blocks.
-{
-  "ignore": boolean,
-  "summary": "One concise memory summary (if not ignored)",
-  "intent_tags": ["string", "string"],
-  "needs_follow_up": boolean
-}
 ''';
 
     try {

@@ -12,7 +12,8 @@ import 'package:recall_client/src/protocol/contact.dart';
 import '../providers/dashboard_provider.dart';
 import 'coming_soon_screen.dart';
 import 'ask_recall_screen.dart';
-import 'profile_screen.dart';
+import '../../profile/views/profile_screen.dart';
+import 'calendar_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
@@ -73,9 +74,37 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             userImageUrl: _userImageUrl,
           ),
           const AskRecallScreen(),
-          const ComingSoonScreen(featureName: 'People'),
+          // Placeholder for Mic/Voice Screen - reusing AskRecall for now with different mode? 
+          // Or just a placeholder. Let's use AskRecallScreen for now or a dummy.
+          // User asked for "Mike symbol", implies voice. Let's make it open Ask Screen for now
+          // but logically it should be a voice interface.
+          const Center(child: Icon(Icons.mic, size: 80, color: Colors.cyan)), 
+          const ComingSoonScreen(featureName: 'Network'), // Was People
+          const CalendarScreen(),
         ],
       ),
+      floatingActionButton: Container(
+        height: 70,
+        width: 70,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.cyan.withOpacity(0.4),
+              blurRadius: 20,
+              spreadRadius: 5,
+            ),
+          ],
+        ),
+        child: FloatingActionButton(
+          onPressed: () => setState(() => _currentIndex = 2),
+          backgroundColor: const Color(0xFF1A1F24), // Match nav bar or dark
+          elevation: 0,
+          shape: const CircleBorder(side: BorderSide(color: Colors.cyan, width: 2)),
+          child: Icon(Icons.mic, color: _currentIndex == 2 ? Colors.cyan : Colors.white, size: 32),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: _BottomNav(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
@@ -95,39 +124,58 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1F24),
-        border: Border(
-          top: BorderSide(color: Colors.white.withOpacity(0.08), width: 1),
-        ),
-      ),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _NavItem(
-                icon: Icons.home_rounded,
-                label: 'Home',
-                isSelected: currentIndex == 0,
-                onTap: () => onTap(0),
-              ),
-              _NavItem(
-                icon: Icons.chat_bubble_outline_rounded,
-                label: 'Ask',
-                isSelected: currentIndex == 1,
-                onTap: () => onTap(1),
-              ),
-              _NavItem(
-                icon: Icons.people_outline_rounded,
-                label: 'People',
-                isSelected: currentIndex == 2,
-                onTap: () => onTap(2),
-              ),
-            ],
-          ),
+    return BottomAppBar(
+      color: const Color(0xFF1A1F24),
+      shape: const CircularNotchedRectangle(),
+      notchMargin: 8.0,
+      elevation: 10,
+      child: Container(
+        height: 60,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            // Left Group
+            Row(
+              children: [
+                _NavItem(
+                  icon: Icons.home_rounded,
+                  label: 'Home',
+                  isSelected: currentIndex == 0,
+                  onTap: () => onTap(0),
+                ),
+                const SizedBox(width: 20),
+                _NavItem(
+                  icon: Icons.chat_bubble_outline_rounded,
+                  label: 'Chat',
+                  isSelected: currentIndex == 1,
+                  onTap: () => onTap(1),
+                ),
+              ],
+            ),
+            
+            // Spacer for FAB
+            const SizedBox(width: 48),
+
+            // Right Group
+            Row(
+              children: [
+                _NavItem(
+                  icon: Icons.hub_outlined, // Network icon
+                  label: 'Network',
+                  isSelected: currentIndex == 3,
+                  onTap: () => onTap(3),
+                ),
+                const SizedBox(width: 20),
+                _NavItem(
+                  icon: Icons.calendar_today_rounded,
+                  label: 'Calendar',
+                  isSelected: currentIndex == 4,
+                  onTap: () => onTap(4),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
@@ -149,37 +197,28 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
+    return InkWell(
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary.withOpacity(0.1) : Colors.transparent,
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              color: isSelected ? AppColors.primary : const Color(0xFF6B7280),
-              size: 22,
+      customBorder: const CircleBorder(),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            icon,
+            color: isSelected ? Colors.cyan : Colors.grey[600],
+            size: 24,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? Colors.cyan : Colors.grey[600],
+              fontSize: 10,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
             ),
-            if (isSelected) ...[
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: const TextStyle(
-                  color: AppColors.primary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

@@ -53,12 +53,14 @@ class DashboardEndpoint extends Endpoint {
         );
         autoSyncTriggered = true;
         // Run sync in background (don't await to avoid blocking dashboard load)
-        unawaited(_triggerSyncInternal(session, currentUserId).catchError((e) {
-          session.log(
-            'getDashboardData: Background sync error: $e',
-            level: LogLevel.warning,
-          );
-        }));
+        unawaited(
+          _triggerSyncInternal(session, currentUserId).catchError((e) {
+            session.log(
+              'getDashboardData: Background sync error: $e',
+              level: LogLevel.warning,
+            );
+          }),
+        );
       }
 
       // Get recent interactions for memory feed
@@ -131,6 +133,16 @@ class DashboardEndpoint extends Endpoint {
       );
       final totalContacts = allContacts.length;
       final driftingCount = allContacts.where((c) => c.healthScore < 50).length;
+      
+      // Calculate Network Health (Average Health Score)
+      double? networkHealth;
+      if (allContacts.isNotEmpty) {
+        final totalHealth = allContacts.fold<double>(
+          0,
+          (sum, c) => sum + c.healthScore,
+        );
+        networkHealth = totalHealth / totalContacts;
+      }
 
       return DashboardData(
         lastSyncTime: userConfig?.lastSyncTime,
@@ -142,6 +154,7 @@ class DashboardEndpoint extends Endpoint {
         topContacts: topContacts,
         totalContacts: totalContacts,
         driftingCount: driftingCount,
+        networkHealth: networkHealth,
       );
     } catch (e, stack) {
       session.log(

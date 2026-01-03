@@ -26,6 +26,7 @@ abstract class DashboardData implements _i1.SerializableModel {
     required this.topContacts,
     required this.totalContacts,
     required this.driftingCount,
+    this.networkHealth,
   });
 
   factory DashboardData({
@@ -38,6 +39,7 @@ abstract class DashboardData implements _i1.SerializableModel {
     required List<_i2.Contact> topContacts,
     required int totalContacts,
     required int driftingCount,
+    double? networkHealth,
   }) = _DashboardDataImpl;
 
   factory DashboardData.fromJson(Map<String, dynamic> jsonSerialization) {
@@ -64,6 +66,7 @@ abstract class DashboardData implements _i1.SerializableModel {
       ),
       totalContacts: jsonSerialization['totalContacts'] as int,
       driftingCount: jsonSerialization['driftingCount'] as int,
+      networkHealth: (jsonSerialization['networkHealth'] as num?)?.toDouble(),
     );
   }
 
@@ -85,6 +88,8 @@ abstract class DashboardData implements _i1.SerializableModel {
 
   int driftingCount;
 
+  double? networkHealth;
+
   /// Returns a shallow copy of this [DashboardData]
   /// with some or all fields replaced by the given arguments.
   @_i1.useResult
@@ -98,6 +103,7 @@ abstract class DashboardData implements _i1.SerializableModel {
     List<_i2.Contact>? topContacts,
     int? totalContacts,
     int? driftingCount,
+    double? networkHealth,
   });
   @override
   Map<String, dynamic> toJson() {
@@ -114,6 +120,7 @@ abstract class DashboardData implements _i1.SerializableModel {
       'topContacts': topContacts.toJson(valueToJson: (v) => v.toJson()),
       'totalContacts': totalContacts,
       'driftingCount': driftingCount,
+      if (networkHealth != null) 'networkHealth': networkHealth,
     };
   }
 
@@ -136,6 +143,7 @@ class _DashboardDataImpl extends DashboardData {
     required List<_i2.Contact> topContacts,
     required int totalContacts,
     required int driftingCount,
+    double? networkHealth,
   }) : super._(
          lastSyncTime: lastSyncTime,
          isSyncing: isSyncing,
@@ -146,6 +154,7 @@ class _DashboardDataImpl extends DashboardData {
          topContacts: topContacts,
          totalContacts: totalContacts,
          driftingCount: driftingCount,
+         networkHealth: networkHealth,
        );
 
   /// Returns a shallow copy of this [DashboardData]
@@ -162,6 +171,7 @@ class _DashboardDataImpl extends DashboardData {
     List<_i2.Contact>? topContacts,
     int? totalContacts,
     int? driftingCount,
+    Object? networkHealth = _Undefined,
   }) {
     return DashboardData(
       lastSyncTime: lastSyncTime is DateTime?
@@ -184,6 +194,9 @@ class _DashboardDataImpl extends DashboardData {
           topContacts ?? this.topContacts.map((e0) => e0.copyWith()).toList(),
       totalContacts: totalContacts ?? this.totalContacts,
       driftingCount: driftingCount ?? this.driftingCount,
+      networkHealth: networkHealth is double?
+          ? networkHealth
+          : this.networkHealth,
     );
   }
 }

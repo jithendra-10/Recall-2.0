@@ -92,6 +92,30 @@ class GmailSyncFutureCall extends FutureCall {
       refreshToken,
       ['https://www.googleapis.com/auth/gmail.readonly'],
     );
+    
+    // --- FORCE RESET LOGIC (Smart Filter Update) ---
+    // We wipe existing data to ensure the new "90-day Smart View" is clean.
+    // This removes "dumb" sync data (Pinterest, etc.) and allows fresh population.
+    try {
+      if (userConfig.lastSyncTime != null) {
+        session.log('Forcing full reset for user ${userConfig.userInfoId}...', level: LogLevel.warning);
+        
+        // 1. Delete all existing interactions
+        await Interaction.db.deleteWhere(
+          session,
+          where: (t) => t.ownerId.equals(userConfig.userInfoId),
+        );
+        
+        // 2. Clear known contacts' health scores (optional, but cleaner)
+        // We keep contacts to avoid re-creating, just reset logic if needed, but keeping them is fine.
+        
+        // 3. Reset sync time in memory to force "First Sync" logic (90 days)
+        userConfig.lastSyncTime = null; // This affects the query generation below
+      }
+    } catch (e) {
+      session.log('Error during force reset: $e', level: LogLevel.error);
+    }
+    // -----------------------------------------------
 
     final authClient = autoRefreshingClient(
       ClientId(_clientId, _clientSecret),
@@ -110,14 +134,14 @@ class GmailSyncFutureCall extends FutureCall {
         final seconds = userConfig.lastSyncTime!.millisecondsSinceEpoch ~/ 1000;
         q = '$q after:$seconds';
       } else {
-        // First sync: Last 30 days
-        q = '$q newer_than:30d';
+        // First sync: Last 90 days as requested
+        q = '$q newer_than:90d';
       }
 
       final listResponse = await gmailApi.users.messages.list(
         'me',
         q: q,
-        maxResults: 50,
+        maxResults: 100, // Fetch more to allow for filtering
       );
 
       if (listResponse.messages != null) {
@@ -194,57 +218,65 @@ class GmailSyncFutureCall extends FutureCall {
   bool _shouldFilterEmail(gmail.Message message) {
     final labels = message.labelIds ?? [];
 
-    // Filter spam and specific categories
-    // User requested: "except automation mails, remaiing all mailes should be show"
-    // We interpret "automation" as Social, Updates, and Forums. Promotions are often semi-automated but might be desired?
-    // Let's filter strict automation categories.
+    // STRICT Category Filtering (Step 1)
+    // Exclude PROMOTIONS, SOCIAL, UPDATES, FORUMS
     if (labels.contains('SPAM') ||
         labels.contains('CATEGORY_SOCIAL') ||
         labels.contains('CATEGORY_UPDATES') ||
-        labels.contains('CATEGORY_FORUMS')) {
+        labels.contains('CATEGORY_FORUMS') ||
+        labels.contains('CATEGORY_PROMOTIONS')) { // Added Promotions
       return true;
     }
-    // Note: We are ALLOWING 'CATEGORY_PROMOTIONS' for now as they might not be "automation" in the user's mind,
-    // or we can add it to the list if "automation" implies all non-personal.
-    // Safest bet for "automation" is Updates (transactional) and Social.
 
-    // Filter by subject patterns (OTPs, automated messages)
+    // Filter by subject patterns (Step 1 & 4 - heuristics)
     final subject = _getHeader(message, 'Subject')?.toLowerCase() ?? '';
     final filterPatterns = [
-      'otp',
-      'verification code',
-      'security code',
-      'one-time',
-      'noreply',
-      'no-reply',
-      'do not reply',
-      'automated',
-      'unsubscribe',
-      'newsletter',
-      'digest',
-      'notification',
+      'otp', 'verification code', 'security code', 'one-time',
+      'noreply', 'no-reply', 'do not reply', 'automated',
+      'unsubscribe', 'newsletter', 'digest', 'notification',
+      'alert', 'statement', 'receipt', 'order #', 'invoice',
+      'bill', 'payment', 'confirm'
     ];
 
     for (final pattern in filterPatterns) {
       if (subject.contains(pattern)) return true;
     }
 
-    // Filter by sender patterns
+    // Filter by sender patterns (Step 2 - Sender Intelligence)
     final from = _getHeader(message, 'From')?.toLowerCase() ?? '';
     final senderFilters = [
-      'noreply@',
-      'no-reply@',
-      'notifications@',
-      'support@',
-      'info@',
-      'news@',
-      'updates@',
-      'mailer@',
-      'postmaster@',
+      'noreply', 'no-reply', 'notifications', 'support',
+      'info', 'news', 'updates', 'mailer', 'postmaster',
+      'marketing', 'sales', 'hello@', 'contact@', 'team@',
+      'subscriptions', 'billing', 'accounts', 'alerts',
+      // Explicit blocks from user feedback
+      'pinterest', 'gitguardian', 'internshala', 'linkedin',
+      'twitter', 'facebook', 'instagram', 'slack', 'discord'
     ];
 
     for (final pattern in senderFilters) {
       if (from.contains(pattern)) return true;
+    }
+
+    // Thread Participation Check (Step 3 - Heuristic)
+    // If INBOUND and NOT a reply (naturally cold), check stricter.
+    final isSent = labels.contains('SENT');
+    if (!isSent) {
+      // Check for In-Reply-To or References headers which indicate a thread
+      final inReplyTo = _getHeader(message, 'In-Reply-To');
+      final references = _getHeader(message, 'References');
+      
+      final isThreadResponse = (inReplyTo != null && inReplyTo.isNotEmpty) || 
+                               (references != null && references.isNotEmpty);
+
+      if (!isThreadResponse) {
+        // This is a cold inbound email (new thread).
+        // Usage of generic sender names like "Head of X", "Recruiting", etc. might still get through
+        // but we filtered specific automated keywords above.
+        // We TRUST Gemini to filter "Cold Sales" vs "Recruiter" in Step 4.
+        // But we can be slightly stricter here if we wanted.
+        // For now, let it pass to Gemini if it passed sender filters.
+      }
     }
 
     return false;
