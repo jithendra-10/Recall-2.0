@@ -37,6 +37,14 @@ jobs:
         working-directory: recall_server
         run: serverpod generate
 
+      - name: Create dummy .env for tests
+        working-directory: recall_server
+        run: |
+          echo "GEMINI_API_KEY=dummy" >> .env
+          echo "GOOGLE_CLIENT_ID=dummy" >> .env
+          echo "GOOGLE_CLIENT_SECRET=dummy" >> .env
+          echo "SERVER_URL=http://localhost:8080/" >> .env
+
       - name: Run tests
         working-directory: recall_server
         run: dart test
