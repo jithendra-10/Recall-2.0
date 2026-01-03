@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:serverpod/serverpod.dart';
 import 'package:http/http.dart' as http;
 import '../generated/protocol.dart';
+import 'dart:async';
 
 class DashboardEndpoint extends Endpoint {
   // Don't require login - we'll check manually or use demo data
@@ -52,12 +53,12 @@ class DashboardEndpoint extends Endpoint {
         );
         autoSyncTriggered = true;
         // Run sync in background (don't await to avoid blocking dashboard load)
-        _triggerSyncInternal(session, currentUserId).catchError((e) {
+        unawaited(_triggerSyncInternal(session, currentUserId).catchError((e) {
           session.log(
             'getDashboardData: Background sync error: $e',
             level: LogLevel.warning,
           );
-        });
+        }));
       }
 
       // Get recent interactions for memory feed
